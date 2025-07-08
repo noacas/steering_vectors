@@ -1,3 +1,5 @@
+import itertools
+
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression
 import numpy as np
@@ -28,9 +30,36 @@ def compute_component_prediction_r2(dot_prod_dict_train, dot_prod_dict_test, res
     return r2s
 
 
-def compare_component_prediction_r2(model_bundle: ModelBundle):
+def compute_multi_component_prediction_r2(dot_prod_dict_train, dot_prod_dict_test, residual_stream_component_name = 'blocks.10.hook_resid_pre'):
+    # Expecting that dot_prod_dict is a nested dict of example: {component: dot product} pairs
+    component_names = dot_prod_dict_train[0].keys()
+    total_dot_products_train = np.array([dot_prod_dict_train[example][residual_stream_component_name] for example in range(len(dot_prod_dict_train))])
+    total_dot_products_test = np.array([dot_prod_dict_test[example][residual_stream_component_name] for example in range(len(dot_prod_dict_test))])
+    r2s = {}
+
+    for c1, c2 in itertools.combinations(component_names, 2):
+        c1_dot_products_train = np.array([dot_prod_dict_train[example][c1] for example in range(len(dot_prod_dict_train))])
+        c1_dot_products_test = np.array([dot_prod_dict_test[example][c1] for example in range(len(dot_prod_dict_test))])
+
+        c2_dot_products_train = np.array([dot_prod_dict_train[example][c2] for example in range(len(dot_prod_dict_train))])
+        c2_dot_products_test = np.array([dot_prod_dict_test[example][c2] for example in range(len(dot_prod_dict_test))])
+
+        component_dot_products_train = np.stack((c1_dot_products_train, c2_dot_products_train), axis=1)
+        component_dot_products_test = np.stack((c1_dot_products_test, c2_dot_products_test), axis=1)
+
+        pipeline = LinearRegression()
+        pipeline.fit(component_dot_products_train.reshape(-1, 1), total_dot_products_train)
+        pred = pipeline.predict(component_dot_products_test.reshape(-1, 1))
+
+        r2s[f"{c1} x {c2}"] = r2_score(total_dot_products_test, pred)
+    return r2s
+
+
+def compare_component_prediction_r2(model_bundle: ModelBundle, multicomponent=False):
     train_dict = collections.defaultdict(dict)
     test_dict = collections.defaultdict(dict)
+
+    compute_component_prediction_r2_func = compute_multi_component_prediction_r2 if multicomponent else compute_component_prediction_r2
 
     for pos in range(-1, -MIN_LEN - 1, -1):
         print("pos = ", pos)
@@ -45,8 +74,8 @@ def compare_component_prediction_r2(model_bundle: ModelBundle):
         harmful_outputs_test = get_dot_act(model, model_bundle.harmful_inst_test[:subset_len], pos, refusal_direction)
 
         # Get per component r2 score
-        harmless_r2s = compute_component_prediction_r2(harmless_outputs_train, harmless_outputs_test)
-        harmful_r2s = compute_component_prediction_r2(harmful_outputs_train, harmful_outputs_test)
+        harmless_r2s = compute_component_prediction_r2_func(harmless_outputs_train, harmless_outputs_test)
+        harmful_r2s = compute_component_prediction_r2_func(harmful_outputs_train, harmful_outputs_test)
 
         diff_in_means_train = get_mean_dot_prod(harmful_outputs_train)
         diff_in_means_train = dict_subtraction(diff_in_means_train, get_mean_dot_prod(harmless_outputs_train))
