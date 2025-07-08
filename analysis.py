@@ -1,4 +1,5 @@
 import itertools
+import os
 
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression
@@ -58,6 +59,7 @@ def compute_multi_component_prediction_r2(dot_prod_dict_train, dot_prod_dict_tes
 def compare_component_prediction_r2(model_bundle: ModelBundle, multicomponent=False):
     train_dict = collections.defaultdict(dict)
     test_dict = collections.defaultdict(dict)
+    harmless_dict, harmful_dict = collections.defaultdict(dict), collections.defaultdict(dict)
 
     compute_component_prediction_r2_func = compute_multi_component_prediction_r2 if multicomponent else compute_component_prediction_r2
 
@@ -76,6 +78,10 @@ def compare_component_prediction_r2(model_bundle: ModelBundle, multicomponent=Fa
         # Get per component r2 score
         harmless_r2s = compute_component_prediction_r2_func(harmless_outputs_train, harmless_outputs_test)
         harmful_r2s = compute_component_prediction_r2_func(harmful_outputs_train, harmful_outputs_test)
+
+        # Sort the diff in means by train
+        harmful_r2s_list = list(harmful_r2s.items())
+        harmful_r2s_list.sort(key=lambda x: x[1], reverse=True)
 
         diff_in_means_train = get_mean_dot_prod(harmful_outputs_train)
         diff_in_means_train = dict_subtraction(diff_in_means_train, get_mean_dot_prod(harmless_outputs_train))
@@ -97,6 +103,12 @@ def compare_component_prediction_r2(model_bundle: ModelBundle, multicomponent=Fa
             print(f"{component_name}: R2 - Harmless: {harmless_r2s[component_name]:.4f} Harmful: {harmful_r2s[component_name]:.4f}")
             print()
 
+        for component_names, _ in harmful_r2s_list:
+            harmless_dict[pos][component_names] = harmless_r2s[component_names]
+            harmful_dict[pos][component_names] = harmful_r2s[component_names]
+            print(
+                f"{component_names}: R2 - Harmless: {harmless_r2s[component_names]:.4f} Harmful: {harmful_r2s[component_names]:.4f}")
+
         # del harmless_outputs_train
         # del harmless_outputs_test
         # del harmful_outputs_train
@@ -105,5 +117,10 @@ def compare_component_prediction_r2(model_bundle: ModelBundle, multicomponent=Fa
 
     train_df = pd.DataFrame(train_dict)
     test_df = pd.DataFrame(test_dict)
-    train_df.to_csv('train_df.csv')
-    test_df.to_csv('test_df.csv')
+    train_df.to_csv(os.path.join(model_bundle.results_dir, 'train_df.csv'))
+    test_df.to_csv(os.path.join(model_bundle.results_dir, 'test_df.csv'))
+
+    harmful_df = pd.DataFrame(harmful_dict)
+    harmless_df = pd.DataFrame(harmless_dict)
+    harmful_df.to_csv(os.path.join(model_bundle.results_dir, 'harmful_r2s.csv'))
+    harmless_df.to_csv(os.path.join(model_bundle.results_dir, 'harmless_r2s.csv'))

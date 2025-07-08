@@ -48,11 +48,7 @@ def get_harmless_instructions():
 
 def get_refusal_direction():
     # Code to take refusal direction
-    refusal_path = '/content/direction.pt'
-    download_link = 'https://drive.google.com/uc?export=download&id=1am7LYIZC69Y9SWZ2qlf4iwOwamyfqgSg'
-
-    gdown.download(download_link, refusal_path)
-
+    refusal_path = 'content/direction.pt'
     refusal_dir = torch.load(refusal_path)
     refusal_dir /= torch.norm(refusal_dir)
     return refusal_dir
@@ -64,8 +60,29 @@ class ModelBundle:
     for easy passing to functions and methods.
     """
 
-    def __init__(self):
+    def __init__(self, results_dir=None,
+                 auto_create_results_dir=True):
         self.model = load_model()
         self.harmful_inst_train, self.harmful_inst_test = get_harmful_instructions()
         self.harmless_inst_train, self.harmless_inst_test = get_harmless_instructions()
         self.refusal_direction = get_refusal_direction()
+
+        # Set up results directory
+        if results_dir is None and auto_create_results_dir:
+            self.results_dir = self._create_timestamped_results_dir()
+        else:
+            self.results_dir = results_dir
+
+        # Create the directory if it doesn't exist
+        if self.results_dir and auto_create_results_dir:
+            import os
+            os.makedirs(self.results_dir, exist_ok=True)
+
+    def _create_timestamped_results_dir(self):
+        """Create a timestamped results directory."""
+        import os
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_dir = f"results_{timestamp}"
+        return results_dir
