@@ -21,3 +21,4 @@ gdown>=4.7.0
 # einops>=0.6.0  # Commented out in the code but may be needed
 # jaxtyping>=0.2.0  # Commented out in the code but may be needed
 # colorama>=0.4.0  # Commented out in the code but may be needed
+huggingface-hub~=0.33.2
