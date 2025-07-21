@@ -32,7 +32,7 @@ def get_act(model, dataset, pos):
      # output[example][component_name] = dot product of component component_name with refusal dir for text example i at position pos
     return output
 
-def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False):
+def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False, get_aggregated_vector=False):
     """
     Cache dot products with the steering vector for each example in the dataset at a given position along the sequence.
     """
@@ -43,6 +43,9 @@ def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False):
     hook_names.extend([f"blocks.{i}.hook_mlp_out" for i in range(LAYER)])
     hook_names.append(f"blocks.{LAYER}.hook_resid_pre")
     hook_names.append(f"blocks.0.hook_resid_pre")
+
+    if get_aggregated_vector:
+        aggregated_vector = torch.zeros_like(refusal_dir, device=DEVICE)
 
     # TODO: Batching
     for text in tqdm(dataset, desc="Caching Activations"):
@@ -68,6 +71,8 @@ def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False):
                 cache[component_name] = component_dot_product
                 if cache_norms:
                     norm_cache[component_name] = torch.norm(cache[component_name], dim=-1).detach().cpu()[0, pos].item()
+                if get_aggregated_vector:
+                    aggregated_vector += cache[component_name][:, pos, :].sum(dim=0).detach().cpu()
 
             # Remove from GPU to avoid OOM
             # This is probably bad and slow, FIX ME
@@ -79,8 +84,14 @@ def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False):
                 output_norm.append(norm_cache)
             output_prod.append(cache)
 
-     # output[example][component_name] = dot product of component component_name with refusal dir for text example i at position pos
-    return output_prod, norm_cache if cache_norms else output_prod
+    outputs = [output_prod]
+    if cache_norms:
+        outputs.append(output_norm)
+    if get_aggregated_vector:
+        outputs.append(aggregated_vector)
+
+    # output_prod[example][component_name] = dot product of component component_name with refusal dir for text example i at position pos
+    return tuple(outputs)
 
 def get_mean_dot_prod(dot_prod_dict):
     component_names = dot_prod_dict[0].keys()
