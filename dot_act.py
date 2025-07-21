@@ -6,15 +6,18 @@ from tqdm import tqdm
 
 from consts import LAYER, DEVICE
 
+
 def get_act(model, dataset, pos):
     print("\nProcessing dataset and caching activations...")
     output = []
-    hook_names = [f"blocks.{i}.hook_attn_out" for i in range(LAYER)]
-    hook_names.extend([f"blocks.{i}.hook_mlp_out" for i in range(LAYER)])
-    hook_names.append(f"blocks.{LAYER}.hook_resid_pre")
-    hook_names.append(f"blocks.0.hook_resid_pre")
 
-    # TODO: Batching
+    # Build hook names once
+    hook_names = (
+            [f"blocks.{i}.hook_attn_out" for i in range(LAYER)] +
+            [f"blocks.{i}.hook_mlp_out" for i in range(LAYER)] +
+            [f"blocks.{LAYER}.hook_resid_pre", "blocks.0.hook_resid_pre"]
+    )
+
     for text in tqdm(dataset, desc="Caching Activations"):
         # Tokenize the input text
         # TODO: For the Qwen example, they had some chat template, do we need this too maybe?
@@ -67,7 +70,7 @@ def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False, get_aggrega
                         'BND, D -> BN',
                         cache[component_name],
                         refusal_dir.type(cache[component_name].dtype),
-                    ).detach().cpu()[0 , pos].item() # Need to change the indexing when adding batches
+                    ).detach().cpu()[0 , pos].item()
                 cache[component_name] = component_dot_product
                 if cache_norms:
                     norm_cache[component_name] = torch.norm(cache[component_name], dim=-1).detach().cpu()[0, pos].item()
@@ -78,7 +81,6 @@ def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False, get_aggrega
             # This is probably bad and slow, FIX ME
             [v.cpu() for v in _cache.cache_dict.values()]
             del _cache
-            # gc.collect()
 
             if cache_norms:
                 output_norm.append(norm_cache)
