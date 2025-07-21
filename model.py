@@ -53,6 +53,21 @@ def get_refusal_direction():
     refusal_dir /= torch.norm(refusal_dir)
     return refusal_dir
 
+import requests
+import json
+from sklearn.model_selection import train_test_split
+
+def get_emotion(emotion):
+    url = f'https://raw.githubusercontent.com/abrvkh/explainability_toolkit/main/data/emotions/{emotion}.json'
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise ValueError(f"Failed to fetch data from {url}")
+    instructions = json.loads(response.content.decode('utf-8'))
+    if not isinstance(instructions, list):
+        raise ValueError("Expected a JSON list of strings.")
+    train, test = train_test_split(instructions, test_size=0.2, random_state=42)
+    return train, test
+
 
 class ModelBundle:
     """
