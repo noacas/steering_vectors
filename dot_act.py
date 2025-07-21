@@ -57,9 +57,6 @@ def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False, get_aggrega
         inputs = model.to_tokens(text).to(DEVICE)
 
         with torch.no_grad():
-          #TODO next meeting shira
-          # This is from the tutorial, we don't need to save all the layers in the cache
-          # _, gpt2_attn_cache = model.run_with_cache(gpt2_tokens, remove_batch_dim=True, stop_at_layer=attn_layer + 1, names_filter=[attn_hook_name])
             _, _cache = model.run_with_cache(inputs, names_filter = hook_names, stop_at_layer=LAYER + 1)
             cache = copy.deepcopy(_cache.cache_dict)
             if cache_norms:

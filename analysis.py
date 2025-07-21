@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from sklearn.metrics import r2_score
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, LinearModel, Lasso
 
 from consts import MIN_LEN
 from dot_act import get_dot_act, get_mean_dot_prod, get_act
@@ -90,6 +90,47 @@ class ComponentPredictor:
             )
 
         return r2_scores
+    
+    def _fit_lasso(self, X_train: np.ndarray, y_train: np.ndarray) -> LinearModel:
+        """Fit Lasso regression and return the model."""
+        lasso = Lasso(alpha=0.1, max_iter=10000)
+        lasso.fit(X_train, y_train)
+        return lasso
+    
+    def lr_components_and_norms(self, dot_prod_dict_train: List[Dict],
+                                dot_prod_dict_test: List[Dict],
+                                norms_train: List[Dict], norms_test: List[Dict]) -> LinearModel:
+        """Run Lasso on all components and norms."""
+        component_names = list(dot_prod_dict_train[0].keys())
+        train_feature_names = [c for c in component_names if c != self.residual_stream_component]
+
+        X_train_dots = np.stack([
+            self._extract_dot_products(dot_prod_dict_train, c).reshape(1, -1)
+            for c in train_feature_names
+        ], axis=0)
+        X_train_norms = np.stack([
+            self._extract_dot_products(norms_train, c).reshape(1, -1)
+            for c in train_feature_names
+        ], axis=0)
+
+        X_test_dots = np.stack([
+            self._extract_dot_products(dot_prod_dict_test, c).reshape(1, -1)
+            for c in train_feature_names
+        ], axis=0)
+        X_test_norms = np.stack([
+            self._extract_dot_products(norms_test, c).reshape(1, -1)
+            for c in train_feature_names
+        ], axis=0)
+
+        X_train = np.stack([X_train_dots, X_train_norms], axis=1)
+        X_test = np.stack([X_test_dots, X_test_norms], axis=1)
+        target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
+        target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
+
+        lasso = self._fit_lasso(X_train, target_train)
+        r2 = lasso.score(X_test, target_test)
+        
+        return r2, lasso.coef_, lasso.intercept_, train_feature_names
 
 
 class ComponentAnalyzer:
@@ -118,7 +159,7 @@ class ComponentAnalyzer:
             self.model_bundle.harmful_inst_test[:subset_len]
         )
 
-    def _compute_dot_activations(self, position: int, data_subsets: Tuple) -> Tuple[List[Dict], ...]:
+    def _compute_dot_activations(self, position: int, data_subsets: Tuple, cache_norms=False, get_aggregated_vector=False) -> Tuple[List[Dict], ...]:
         """Compute dot product activations for all data subsets at given position."""
         harmless_train, harmful_train, harmless_test, harmful_test = data_subsets
 
@@ -126,10 +167,14 @@ class ComponentAnalyzer:
         refusal_direction = self.model_bundle.refusal_direction
 
         return (
-            get_dot_act(model, harmless_train, position, refusal_direction),
-            get_dot_act(model, harmful_train, position, refusal_direction),
-            get_dot_act(model, harmless_test, position, refusal_direction),
-            get_dot_act(model, harmful_test, position, refusal_direction)
+            get_dot_act(model, harmless_train, position, refusal_direction, 
+                        cache_norms, get_aggregated_vector),
+            get_dot_act(model, harmful_train, position, refusal_direction,
+                        cache_norms, get_aggregated_vector),
+            get_dot_act(model, harmless_test, position, refusal_direction,
+                        cache_norms, get_aggregated_vector),
+            get_dot_act(model, harmful_test, position, refusal_direction,
+                        cache_norms, get_aggregated_vector)
         )
 
     def _compute_mean_differences(self, harmful_outputs: List[Dict],
@@ -185,6 +230,49 @@ class ComponentAnalyzer:
             harmful_r2s_df=harmful_r2s_df,
             harmless_r2s_df=harmless_r2s_df
         )
+    
+    def analyze_lasso(self) -> None:
+        for position in range(-1, -MIN_LEN - 1, -1):
+            print(f"Analyzing position: {position}")
+
+            # Get data subsets
+            data_subsets = self._get_subset_data()
+
+            # Compute dot activations
+            (harmless_outputs_train, harmful_outputs_train,
+             harmless_outputs_test, harmful_outputs_test) = self._compute_dot_activations(
+                position, data_subsets, cache_norms=True
+            )
+            
+            harmless_dots_train, harmless_norms_train = harmless_outputs_train
+            harmful_dots_train, harmful_norms_train = harmful_outputs_train
+            harmless_dots_test, harmless_norms_test = harmless_outputs_test
+            harmful_dots_test, harmful_norms_test = harmful_outputs_test
+
+            # Run Lasso regression
+            r2_harmless, coef_harmless, intercept_harmless, train_feature_names = self.predictor.lr_components_and_norms(
+                harmless_dots_train,
+                harmless_dots_test,
+                harmless_norms_train,
+                harmless_norms_test
+            )
+
+            print()
+            print(f"Feature names: {train_feature_names}")
+            print(f"Harmless coeffs: {coef_harmless}")
+            print(f"Harmless intercept: {intercept_harmless:.4f}")
+            print(f"Harmless R²: {r2_harmless:.4f}")
+
+            r2_harmful, coef_harmful, intercept_harmful, _ = self.predictor.lr_components_and_norms(
+                harmful_dots_train,
+                harmful_dots_test,
+                harmful_norms_train,
+                harmful_norms_test
+            )
+
+            print(f"Harmful coeffs: {coef_harmful}")
+            print(f"Harmful intercept: {intercept_harmful:.4f}")
+            print(f"Harmful R²: {r2_harmful:.4f}")
 
     def run_analysis(self) -> ComponentAnalysisResults:
         """Run the complete component analysis."""
@@ -247,3 +335,15 @@ def compare_component_prediction_r2(model_bundle: ModelBundle,
     """
     analyzer = ComponentAnalyzer(model_bundle, multicomponent)
     return analyzer.run_analysis()
+
+def predict_dot_product_lasso(model_bundle: ModelBundle,
+                              multicomponent: bool = False) -> None:
+    """
+    Run Lasso regression on dot products to predict residual stream.
+
+    Args:
+        model_bundle: Bundle containing model and data
+        multicomponent: Whether to use multi-component prediction
+    """
+    analyzer = ComponentAnalyzer(model_bundle, multicomponent)
+    analyzer.analyze_lasso()

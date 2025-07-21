@@ -1,14 +1,15 @@
 """
 Where do steering vectors come from
 """
-from analysis import compare_component_prediction_r2
+from analysis import compare_component_prediction_r2, predict_dot_product_lasso
 from model import ModelBundle
 
 
 def main():
     # Load the model bundle
     model_bundle = ModelBundle()
-    compare_component_prediction_r2(model_bundle=model_bundle)
+    # compare_component_prediction_r2(model_bundle=model_bundle)
+    predict_dot_product_lasso(model_bundle=model_bundle)
 
 
 if __name__ == "__main__":
