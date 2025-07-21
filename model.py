@@ -49,9 +49,11 @@ def get_harmless_instructions():
     return train, test
 
 
-def get_refusal_direction(steering_vector):
+def get_refusal_direction(model, steering_vector):
     # Code to take refusal direction
-    refusal_path = f'content/{steering_vector}_direction.pt'
+    refusal_path = "temp.pt"
+    if model == "gemma" and steering_vector == "harmfull":
+        refusal_path = f'content/{steering_vector}_direction.pt'
     if not os.path.isfile(refusal_path):
         raise FileNotFoundError(f'Could not find {refusal_path}')
     refusal_dir = torch.load(refusal_path)
@@ -70,7 +72,7 @@ class ModelBundle:
         self.model = load_model(model)
         self.harmful_inst_train, self.harmful_inst_test = get_harmful_instructions()
         self.harmless_inst_train, self.harmless_inst_test = get_harmless_instructions()
-        self.refusal_direction = get_refusal_direction(steering_vector)
+        self.refusal_direction = get_refusal_direction(model, steering_vector)
 
         # Set up results directory
         if results_dir is None and auto_create_results_dir:
