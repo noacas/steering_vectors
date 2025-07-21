@@ -1,11 +1,12 @@
 import itertools
 import os
+from typing import Dict, List, Tuple, Any
+from dataclasses import dataclass
 
+import numpy as np
+import pandas as pd
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression
-import numpy as np
-import collections
-import pandas as pd
 
 from consts import MIN_LEN
 from dot_act import get_dot_act, get_mean_dot_prod
@@ -13,114 +14,236 @@ from model import ModelBundle
 from utils import dict_subtraction
 
 
-def compute_component_prediction_r2(dot_prod_dict_train, dot_prod_dict_test, residual_stream_component_name = 'blocks.10.hook_resid_pre'):
-    # Expecting that dot_prod_dict is a nested dict of example: {component: dot product} pairs
-    component_names = dot_prod_dict_train[0].keys()
-    total_dot_products_train = np.array([dot_prod_dict_train[example][residual_stream_component_name] for example in range(len(dot_prod_dict_train))])
-    total_dot_products_test = np.array([dot_prod_dict_test[example][residual_stream_component_name] for example in range(len(dot_prod_dict_test))])
-    r2s = dict()
-    for component_name in component_names:
-        component_dot_products_train = np.array([dot_prod_dict_train[example][component_name] for example in range(len(dot_prod_dict_train))])
-        component_dot_products_test = np.array([dot_prod_dict_test[example][component_name] for example in range(len(dot_prod_dict_test))])
+@dataclass
+class ComponentAnalysisResults:
+    """Data class to store analysis results."""
+    train_df: pd.DataFrame
+    test_df: pd.DataFrame
+    harmful_r2s_df: pd.DataFrame
+    harmless_r2s_df: pd.DataFrame
 
+
+class ComponentPredictor:
+    """Handles component prediction analysis using linear regression."""
+
+    def __init__(self, residual_stream_component: str = 'blocks.10.hook_resid_pre'):
+        self.residual_stream_component = residual_stream_component
+
+    def _extract_dot_products(self, dot_prod_dict: List[Dict], component_name: str) -> np.ndarray:
+        """Extract dot products for a specific component across all examples."""
+        return np.array([
+            dot_prod_dict[example][component_name]
+            for example in range(len(dot_prod_dict))
+        ])
+
+    def _fit_and_predict(self, X_train: np.ndarray, y_train: np.ndarray,
+                         X_test: np.ndarray, y_test: np.ndarray) -> float:
+        """Fit linear regression and return R² score."""
         lr = LinearRegression()
-        lr.fit(component_dot_products_train.reshape(-1, 1), total_dot_products_train)
-        pred = lr.predict(component_dot_products_test.reshape(-1, 1))
+        lr.fit(X_train, y_train)
+        predictions = lr.predict(X_test)
+        return r2_score(y_test, predictions)
 
-        r2s[component_name] = r2_score(total_dot_products_test, pred)
-    return r2s
+    def compute_single_component_r2(self, dot_prod_dict_train: List[Dict],
+                                    dot_prod_dict_test: List[Dict]) -> Dict[str, float]:
+        """Compute R² scores for single component predictions."""
+        component_names = dot_prod_dict_train[0].keys()
+
+        target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
+        target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
+
+        r2_scores = {}
+        for component_name in component_names:
+            features_train = self._extract_dot_products(dot_prod_dict_train, component_name).reshape(-1, 1)
+            features_test = self._extract_dot_products(dot_prod_dict_test, component_name).reshape(-1, 1)
+
+            r2_scores[component_name] = self._fit_and_predict(
+                features_train, target_train, features_test, target_test
+            )
+
+        return r2_scores
+
+    def compute_multi_component_r2(self, dot_prod_dict_train: List[Dict],
+                                   dot_prod_dict_test: List[Dict]) -> Dict[str, float]:
+        """Compute R² scores for two-component predictions."""
+        component_names = list(dot_prod_dict_train[0].keys())
+
+        target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
+        target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
+
+        r2_scores = {}
+        for c1, c2 in itertools.combinations(component_names, 2):
+            # Stack features for two components
+            features_train = np.stack([
+                self._extract_dot_products(dot_prod_dict_train, c1),
+                self._extract_dot_products(dot_prod_dict_train, c2)
+            ], axis=1)
+
+            features_test = np.stack([
+                self._extract_dot_products(dot_prod_dict_test, c1),
+                self._extract_dot_products(dot_prod_dict_test, c2)
+            ], axis=1)
+
+            # Note: Original code had a bug - should not reshape to (-1, 1) for multi-component
+            r2_scores[f"{c1} x {c2}"] = self._fit_and_predict(
+                features_train, target_train, features_test, target_test
+            )
+
+        return r2_scores
 
 
-def compute_multi_component_prediction_r2(dot_prod_dict_train, dot_prod_dict_test, residual_stream_component_name = 'blocks.10.hook_resid_pre'):
-    # Expecting that dot_prod_dict is a nested dict of example: {component: dot product} pairs
-    component_names = dot_prod_dict_train[0].keys()
-    total_dot_products_train = np.array([dot_prod_dict_train[example][residual_stream_component_name] for example in range(len(dot_prod_dict_train))])
-    total_dot_products_test = np.array([dot_prod_dict_test[example][residual_stream_component_name] for example in range(len(dot_prod_dict_test))])
-    r2s = {}
+class ComponentAnalyzer:
+    """Main class for performing component analysis."""
 
-    for c1, c2 in itertools.combinations(component_names, 2):
-        c1_dot_products_train = np.array([dot_prod_dict_train[example][c1] for example in range(len(dot_prod_dict_train))])
-        c1_dot_products_test = np.array([dot_prod_dict_test[example][c1] for example in range(len(dot_prod_dict_test))])
+    def __init__(self, model_bundle: ModelBundle, multicomponent: bool = False):
+        self.model_bundle = model_bundle
+        self.predictor = ComponentPredictor()
+        self.multicomponent = multicomponent
 
-        c2_dot_products_train = np.array([dot_prod_dict_train[example][c2] for example in range(len(dot_prod_dict_train))])
-        c2_dot_products_test = np.array([dot_prod_dict_test[example][c2] for example in range(len(dot_prod_dict_test))])
+        # Choose prediction method based on multicomponent flag
+        self.prediction_method = (
+            self.predictor.compute_multi_component_r2
+            if multicomponent else
+            self.predictor.compute_single_component_r2
+        )
 
-        component_dot_products_train = np.stack((c1_dot_products_train, c2_dot_products_train), axis=1)
-        component_dot_products_test = np.stack((c1_dot_products_test, c2_dot_products_test), axis=1)
+    def _get_subset_data(self) -> Tuple[List, List, List, List]:
+        """Get balanced subsets of training and test data."""
+        subset_len = len(self.model_bundle.harmful_inst_train)
 
-        pipeline = LinearRegression()
-        pipeline.fit(component_dot_products_train.reshape(-1, 1), total_dot_products_train)
-        pred = pipeline.predict(component_dot_products_test.reshape(-1, 1))
+        return (
+            self.model_bundle.harmless_inst_train[:subset_len],
+            self.model_bundle.harmful_inst_train[:subset_len],
+            self.model_bundle.harmless_inst_test[:subset_len],
+            self.model_bundle.harmful_inst_test[:subset_len]
+        )
 
-        r2s[f"{c1} x {c2}"] = r2_score(total_dot_products_test, pred)
-    return r2s
+    def _compute_dot_activations(self, position: int, data_subsets: Tuple) -> Tuple[List[Dict], ...]:
+        """Compute dot product activations for all data subsets at given position."""
+        harmless_train, harmful_train, harmless_test, harmful_test = data_subsets
 
+        model = self.model_bundle.model
+        refusal_direction = self.model_bundle.refusal_direction
 
-def compare_component_prediction_r2(model_bundle: ModelBundle, multicomponent=False):
-    train_dict = collections.defaultdict(dict)
-    test_dict = collections.defaultdict(dict)
-    harmless_dict, harmful_dict = collections.defaultdict(dict), collections.defaultdict(dict)
+        return (
+            get_dot_act(model, harmless_train, position, refusal_direction),
+            get_dot_act(model, harmful_train, position, refusal_direction),
+            get_dot_act(model, harmless_test, position, refusal_direction),
+            get_dot_act(model, harmful_test, position, refusal_direction)
+        )
 
-    compute_component_prediction_r2_func = compute_multi_component_prediction_r2 if multicomponent else compute_component_prediction_r2
+    def _compute_mean_differences(self, harmful_outputs: List[Dict],
+                                  harmless_outputs: List[Dict]) -> Dict[str, float]:
+        """Compute difference in mean dot products between harmful and harmless outputs."""
+        harmful_means = get_mean_dot_prod(harmful_outputs)
+        harmless_means = get_mean_dot_prod(harmless_outputs)
+        return dict_subtraction(harmful_means, harmless_means)
 
-    for pos in range(-1, -MIN_LEN - 1, -1):
-        print("pos = ", pos)
-        subset_len = len(model_bundle.harmful_inst_train) # There is a great imbalance in dataset size
+    def _print_analysis_results(self, position: int, diff_means_train: Dict[str, float],
+                                diff_means_test: Dict[str, float], harmless_r2s: Dict[str, float],
+                                harmful_r2s: Dict[str, float]) -> None:
+        """Print analysis results for debugging/monitoring."""
+        print(f"Position: {position}")
 
-        model = model_bundle.model
-        refusal_direction = model_bundle.refusal_direction
+        # Sort by absolute difference in training means
+        sorted_components = sorted(
+            diff_means_train.items(),
+            key=lambda x: abs(x[1]),
+            reverse=True
+        )
 
-        harmless_outputs_train = get_dot_act(model, model_bundle.harmless_inst_train[:subset_len], pos, refusal_direction)
-        harmful_outputs_train = get_dot_act(model, model_bundle.harmful_inst_train[:subset_len], pos, refusal_direction)
-        harmless_outputs_test = get_dot_act(model, model_bundle.harmless_inst_test[:subset_len], pos, refusal_direction)
-        harmful_outputs_test = get_dot_act(model, model_bundle.harmful_inst_test[:subset_len], pos, refusal_direction)
+        for component_name, diff_train in sorted_components:
+            diff_test = diff_means_test[component_name]
+            harmless_r2 = harmless_r2s.get(component_name, 0.0)
+            harmful_r2 = harmful_r2s.get(component_name, 0.0)
 
-        # Get per component r2 score
-        harmless_r2s = compute_component_prediction_r2_func(harmless_outputs_train, harmless_outputs_test)
-        harmful_r2s = compute_component_prediction_r2_func(harmful_outputs_train, harmful_outputs_test)
-
-        # Sort the diff in means by train
-        harmful_r2s_list = list(harmful_r2s.items())
-        harmful_r2s_list.sort(key=lambda x: x[1], reverse=True)
-
-        diff_in_means_train = get_mean_dot_prod(harmful_outputs_train)
-        diff_in_means_train = dict_subtraction(diff_in_means_train, get_mean_dot_prod(harmless_outputs_train))
-
-        diff_in_means_test = get_mean_dot_prod(harmful_outputs_test)
-        diff_in_means_test = dict_subtraction(diff_in_means_test, get_mean_dot_prod(harmless_outputs_test))
-
-        # Sort the diff in means by train
-        diff_in_means_train_list = list(diff_in_means_train.items())
-        diff_in_means_train_list.sort(key=lambda x: abs(x[1]), reverse=True)
-
-        for component_name, _ in diff_in_means_train_list:
-            diff_train = diff_in_means_train[component_name]#.item()
-            diff_test = diff_in_means_test[component_name]#.item()
-
-            train_dict[pos][component_name] = diff_train
-            test_dict[pos][component_name] = diff_test
-            print(f"{component_name}: Diff in means - Train: {diff_train:.4f} Test: {diff_test:.4f}")
-            print(f"{component_name}: R2 - Harmless: {harmless_r2s[component_name]:.4f} Harmful: {harmful_r2s[component_name]:.4f}")
+            print(f"{component_name}:")
+            print(f"  Diff in means - Train: {diff_train:.4f}, Test: {diff_test:.4f}")
+            print(f"  R² - Harmless: {harmless_r2:.4f}, Harmful: {harmful_r2:.4f}")
             print()
 
-        for component_names, _ in harmful_r2s_list:
-            harmless_dict[pos][component_names] = harmless_r2s[component_names]
-            harmful_dict[pos][component_names] = harmful_r2s[component_names]
-            print(
-                f"{component_names}: R2 - Harmless: {harmless_r2s[component_names]:.4f} Harmful: {harmful_r2s[component_names]:.4f}")
+    def _save_results(self, train_dict: Dict, test_dict: Dict,
+                      harmless_dict: Dict, harmful_dict: Dict) -> ComponentAnalysisResults:
+        """Save results to CSV files and return as structured data."""
+        results_dir = self.model_bundle.results_dir
 
-        # del harmless_outputs_train
-        # del harmless_outputs_test
-        # del harmful_outputs_train
-        # del harmful_outputs_test
-        # gc.collect()
+        # Create DataFrames
+        train_df = pd.DataFrame(train_dict)
+        test_df = pd.DataFrame(test_dict)
+        harmful_r2s_df = pd.DataFrame(harmful_dict)
+        harmless_r2s_df = pd.DataFrame(harmless_dict)
 
-    train_df = pd.DataFrame(train_dict)
-    test_df = pd.DataFrame(test_dict)
-    train_df.to_csv(os.path.join(model_bundle.results_dir, 'train_df.csv'))
-    test_df.to_csv(os.path.join(model_bundle.results_dir, 'test_df.csv'))
+        # Save to CSV
+        train_df.to_csv(os.path.join(results_dir, 'train_df.csv'))
+        test_df.to_csv(os.path.join(results_dir, 'test_df.csv'))
+        harmful_r2s_df.to_csv(os.path.join(results_dir, 'harmful_r2s.csv'))
+        harmless_r2s_df.to_csv(os.path.join(results_dir, 'harmless_r2s.csv'))
 
-    harmful_df = pd.DataFrame(harmful_dict)
-    harmless_df = pd.DataFrame(harmless_dict)
-    harmful_df.to_csv(os.path.join(model_bundle.results_dir, 'harmful_r2s.csv'))
-    harmless_df.to_csv(os.path.join(model_bundle.results_dir, 'harmless_r2s.csv'))
+        return ComponentAnalysisResults(
+            train_df=train_df,
+            test_df=test_df,
+            harmful_r2s_df=harmful_r2s_df,
+            harmless_r2s_df=harmless_r2s_df
+        )
+
+    def run_analysis(self) -> ComponentAnalysisResults:
+        """Run the complete component analysis."""
+        # Initialize result dictionaries
+        train_dict = {}
+        test_dict = {}
+        harmless_dict = {}
+        harmful_dict = {}
+
+        data_subsets = self._get_subset_data()
+
+        # Analyze each position
+        for position in range(-1, -MIN_LEN - 1, -1):
+            print(f"Analyzing position: {position}")
+
+            # Compute activations
+            (harmless_outputs_train, harmful_outputs_train,
+             harmless_outputs_test, harmful_outputs_test) = self._compute_dot_activations(
+                position, data_subsets
+            )
+
+            # Compute R² scores
+            harmless_r2s = self.prediction_method(harmless_outputs_train, harmless_outputs_test)
+            harmful_r2s = self.prediction_method(harmful_outputs_train, harmful_outputs_test)
+
+            # Compute mean differences
+            diff_means_train = self._compute_mean_differences(
+                harmful_outputs_train, harmless_outputs_train
+            )
+            diff_means_test = self._compute_mean_differences(
+                harmful_outputs_test, harmless_outputs_test
+            )
+
+            # Store results
+            train_dict[position] = diff_means_train
+            test_dict[position] = diff_means_test
+            harmless_dict[position] = harmless_r2s
+            harmful_dict[position] = harmful_r2s
+
+            # Print results for monitoring
+            self._print_analysis_results(
+                position, diff_means_train, diff_means_test,
+                harmless_r2s, harmful_r2s
+            )
+
+        return self._save_results(train_dict, test_dict, harmless_dict, harmful_dict)
+
+
+def compare_component_prediction_r2(model_bundle: ModelBundle,
+                                    multicomponent: bool = False) -> ComponentAnalysisResults:
+    """
+    Main entry point for component prediction analysis.
+
+    Args:
+        model_bundle: Bundle containing model and data
+        multicomponent: Whether to use multi-component prediction
+
+    Returns:
+        ComponentAnalysisResults containing all analysis results
+    """
+    analyzer = ComponentAnalyzer(model_bundle, multicomponent)
+    return analyzer.run_analysis()
