@@ -1,6 +1,6 @@
 import gc
 import copy
-
+from consts import DEVICE
 import torch
 from tqdm import tqdm
 
@@ -22,13 +22,13 @@ def get_dot_act(model, dataset, pos, refusal_dir):
     for text in tqdm(dataset, desc="Caching Activations"):
         # Tokenize the input text
         # TODO: For the Qwen example, they had some chat template, do we need this too maybe?
-        inputs = model.to_tokens(text).to(model.device)
+        inputs = model.to_tokens(text).to(DEVICE)
 
         with torch.no_grad():
           #TODO next meeting shira
           # This is from the tutorial, we don't need to save all the layers in the cache
           # _, gpt2_attn_cache = model.run_with_cache(gpt2_tokens, remove_batch_dim=True, stop_at_layer=attn_layer + 1, names_filter=[attn_hook_name])
-            _, _cache = model.run_with_cache(inputs, names_filter = hook_names, stop_at_layer=attn_layer + 1)
+            _, _cache = model.run_with_cache(inputs, names_filter = hook_names, stop_at_layer=LAYER + 1)
             cache = copy.deepcopy(_cache.cache_dict)
 
             for component_name in cache.keys():
