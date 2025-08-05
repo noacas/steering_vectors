@@ -1,7 +1,7 @@
 import torch
 
-MODEL_PATH = 'google/gemma-2b-it'
-HF_TOKEN = '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'
+GEMMA_MODEL_PATH = 'google/gemma-2b-it'
+HF_TOKEN = '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'
 DEVICE = 'cpu'
 if torch.cuda.is_available():
     DEVICE = 'cuda'
