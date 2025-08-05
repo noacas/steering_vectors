@@ -10,7 +10,7 @@ from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 from transformer_lens import HookedTransformer, utils
 
-from consts import HF_TOKEN, DEVICE, GEMMA_MODEL_PATH
+from consts import HF_TOKEN, DEVICE, GEMMA_MODEL_PATH, GEMMA_2_MODEL_PATH, GEMMA_1_HOOK_NAMES, GEMMA_2_HOOK_NAMES
 
 
 def load_model(model):
@@ -19,6 +19,10 @@ def load_model(model):
     """
     if model == "gemma":
         model_path = GEMMA_MODEL_PATH
+        hook_names = GEMMA_1_HOOK_NAMES
+    if model == 'gemma2':
+        model_path = GEMMA_2_MODEL_PATH
+        hook_names = GEMMA_2_HOOK_NAMES
 
     huggingface_hub.login(token=HF_TOKEN)
     model = HookedTransformer.from_pretrained_no_processing(
@@ -26,7 +30,7 @@ def load_model(model):
             device=DEVICE,
             dtype=torch.float16,
         )
-    return model
+    return model, hook_names
 
 
 def get_harmful_instructions():
@@ -78,13 +82,12 @@ class ModelBundle:
     for easy passing to functions and methods.
     """
 
-    def __init__(self, model, steering_vector, hook_names, results_dir=None,
+    def __init__(self, model, steering_vector, results_dir=None,
                  auto_create_results_dir=True):
-        self.model = load_model(model)
+        self.model, self.hook_names = load_model(model)
         self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
         self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
         self.direction = get_direction(model, steering_vector)
-        self.hook_names = hook_names
 
         # Set up results directorys
         if results_dir is None and auto_create_results_dir:
