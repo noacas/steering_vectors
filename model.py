@@ -49,16 +49,27 @@ def get_harmless_instructions():
     return train, test
 
 
-def get_refusal_direction(model, steering_vector):
+def get_positive_instructions(steering_vector):
+    if steering_vector == "harmfull":
+        return get_harmful_instructions()
+    raise ValueError(f"Steering vector {steering_vector} not found")
+
+
+def get_negative_instructions(steering_vector):
+    if steering_vector == "harmfull":
+        return get_harmless_instructions()
+    raise ValueError(f"Steering vector {steering_vector} not found")
+
+
+def get_direction(model, steering_vector):
     # Code to take refusal direction
-    refusal_path = "temp.pt"
     if model == "gemma" and steering_vector == "harmfull":
         refusal_path = f'content/{steering_vector}_direction.pt'
-    if not os.path.isfile(refusal_path):
-        raise FileNotFoundError(f'Could not find {refusal_path}')
-    refusal_dir = torch.load(refusal_path)
-    refusal_dir /= torch.norm(refusal_dir)
-    return refusal_dir
+        if not os.path.isfile(refusal_path):
+            raise FileNotFoundError(f'Could not find {refusal_path}')
+        refusal_dir = torch.load(refusal_path)
+        refusal_dir /= torch.norm(refusal_dir)
+        return refusal_dir
 
 
 class ModelBundle:
@@ -70,11 +81,11 @@ class ModelBundle:
     def __init__(self, model, steering_vector, results_dir=None,
                  auto_create_results_dir=True):
         self.model = load_model(model)
-        self.harmful_inst_train, self.harmful_inst_test = get_harmful_instructions()
-        self.harmless_inst_train, self.harmless_inst_test = get_harmless_instructions()
-        self.refusal_direction = get_refusal_direction(model, steering_vector)
+        self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
+        self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
+        self.direction = get_direction(model, steering_vector)
 
-        # Set up results directory
+        # Set up results directorys
         if results_dir is None and auto_create_results_dir:
             self.results_dir = self._create_timestamped_results_dir()
         else:
