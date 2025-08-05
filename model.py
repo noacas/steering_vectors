@@ -78,12 +78,13 @@ class ModelBundle:
     for easy passing to functions and methods.
     """
 
-    def __init__(self, model, steering_vector, results_dir=None,
+    def __init__(self, model, steering_vector, hook_names, results_dir=None,
                  auto_create_results_dir=True):
         self.model = load_model(model)
         self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
         self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
         self.direction = get_direction(model, steering_vector)
+        self.hook_names = hook_names
 
         # Set up results directorys
         if results_dir is None and auto_create_results_dir:
