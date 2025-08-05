@@ -112,10 +112,10 @@ class ComponentAnalyzer:
         subset_len = len(self.model_bundle.harmful_inst_train)
 
         return (
-            self.model_bundle.harmless_inst_train[:subset_len],
-            self.model_bundle.harmful_inst_train[:subset_len],
-            self.model_bundle.harmless_inst_test[:subset_len],
-            self.model_bundle.harmful_inst_test[:subset_len]
+            self.model_bundle.negative_inst_train[:subset_len],
+            self.model_bundle.positive_inst_train[:subset_len],
+            self.model_bundle.negative_inst_test[:subset_len],
+            self.model_bundle.positive_inst_test[:subset_len]
         )
 
     def _compute_dot_activations(self, position: int, data_subsets: Tuple) -> Tuple[List[Dict], ...]:
