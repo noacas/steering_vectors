@@ -67,7 +67,7 @@ def get_direction(model, steering_vector):
         refusal_path = f'content/{steering_vector}_direction.pt'
         if not os.path.isfile(refusal_path):
             raise FileNotFoundError(f'Could not find {refusal_path}')
-        refusal_dir = torch.load(refusal_path)
+        refusal_dir = torch.load(refusal_path, map_location=DEVICE)
         refusal_dir /= torch.norm(refusal_dir)
         return refusal_dir
 
