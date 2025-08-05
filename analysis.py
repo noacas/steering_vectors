@@ -6,7 +6,12 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from sklearn.metrics import r2_score
-from sklearn.linear_model import LinearRegression, LinearModel, Lasso
+from sklearn.base import RegressorMixin
+from sklearn.linear_model import LinearRegression, Lasso
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+
+from scipy.stats import pearsonr
 
 from consts import MIN_LEN
 from dot_act import get_dot_act, get_mean_dot_prod, get_act
@@ -90,46 +95,79 @@ class ComponentPredictor:
             )
 
         return r2_scores
-    
-    def _fit_lasso(self, X_train: np.ndarray, y_train: np.ndarray) -> LinearModel:
+
+    def _fit_lasso(self, X_train: np.ndarray, y_train: np.ndarray) -> RegressorMixin:
         """Fit Lasso regression and return the model."""
-        lasso = Lasso(alpha=0.1, max_iter=10000)
+        lasso = Lasso(alpha=0.05, max_iter=10000)
         lasso.fit(X_train, y_train)
         return lasso
-    
+
     def lr_components_and_norms(self, dot_prod_dict_train: List[Dict],
                                 dot_prod_dict_test: List[Dict],
-                                norms_train: List[Dict], norms_test: List[Dict]) -> LinearModel:
+                                norms_train: List[Dict], norms_test: List[Dict]) -> RegressorMixin:
         """Run Lasso on all components and norms."""
         component_names = list(dot_prod_dict_train[0].keys())
         train_feature_names = [c for c in component_names if c != self.residual_stream_component]
 
-        X_train_dots = np.stack([
-            self._extract_dot_products(dot_prod_dict_train, c).reshape(1, -1)
+        X_train_dots = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_train, c).reshape(-1, 1)
             for c in train_feature_names
-        ], axis=0)
-        X_train_norms = np.stack([
-            self._extract_dot_products(norms_train, c).reshape(1, -1)
+        ], axis=1)
+        X_train_norms = np.concatenate([
+            self._extract_dot_products(norms_train, c).reshape(-1, 1)
             for c in train_feature_names
-        ], axis=0)
+        ], axis=1)
 
-        X_test_dots = np.stack([
-            self._extract_dot_products(dot_prod_dict_test, c).reshape(1, -1)
+        X_test_dots = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_test, c).reshape(-1, 1)
             for c in train_feature_names
-        ], axis=0)
-        X_test_norms = np.stack([
-            self._extract_dot_products(norms_test, c).reshape(1, -1)
+        ], axis=1)
+        X_test_norms = np.concatenate([
+            self._extract_dot_products(norms_test, c).reshape(-1, 1)
             for c in train_feature_names
-        ], axis=0)
+        ], axis=1)
 
-        X_train = np.stack([X_train_dots, X_train_norms], axis=1)
-        X_test = np.stack([X_test_dots, X_test_norms], axis=1)
+        # print()
+        # print(f"Some statistics about the dot products:")
+        # X_train_dots_normalized = X_train_dots #/ np.clip(X_train_norms, a_min=1e-8, a_max=None)
+        # X_train_dots_mean = np.mean(X_train_dots_normalized, axis=0)
+        # X_train_dots_std = np.std(X_train_dots_normalized, axis=0)
+        # print(f"  Mean Cosine Similarity Train: {X_train_dots_mean}")
+        # print(f"  Std Cosine Similarity Train: {X_train_dots_std}")
+        # print()
+
+        # X_train_dots /= X_train_norms
+        # X_test_dots /= X_test_norms
+
+        # X_train = np.concatenate([X_train_dots, X_train_norms], axis=1)
+        # X_test = np.concatenate([X_test_dots, X_test_norms], axis=1)
+        X_train = X_train_dots
+        X_test = X_test_dots
+
         target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
         target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
+        # target_train_norms = self._extract_dot_products(norms_train, self.residual_stream_component)
+        # target_test_norms = self._extract_dot_products(norms_test, self.residual_stream_component)
+        # target_train /= target_train_norms
+        # target_test_norms /= target_test_norms
+        print()
+        print(f"Target variance: {np.var(target_train, ddof=1)}")
+        print(f"Target mean: {np.mean(target_train)}")
+
+        print()
+        print(f"Top 6 correlating components with target:")
+        corr, _ = pearsonr(X_train, target_train.reshape(-1,1))
+        corr = np.array(corr)
+        corr_with_names = list(zip(train_feature_names, corr))
+        corr_with_names.sort(key=lambda x: abs(x[1]), reverse=True)
+        for i in range(min(6, len(corr_with_names))):
+            name, corr = corr_with_names[i]
+            print(f"{name}: {corr:.4f}")
+        print()
 
         lasso = self._fit_lasso(X_train, target_train)
         r2 = lasso.score(X_test, target_test)
-        
+
         return r2, lasso.coef_, lasso.intercept_, train_feature_names
 
 
@@ -167,7 +205,7 @@ class ComponentAnalyzer:
         refusal_direction = self.model_bundle.refusal_direction
 
         return (
-            get_dot_act(model, harmless_train, position, refusal_direction, 
+            get_dot_act(model, harmless_train, position, refusal_direction,
                         cache_norms, get_aggregated_vector),
             get_dot_act(model, harmful_train, position, refusal_direction,
                         cache_norms, get_aggregated_vector),
@@ -230,7 +268,7 @@ class ComponentAnalyzer:
             harmful_r2s_df=harmful_r2s_df,
             harmless_r2s_df=harmless_r2s_df
         )
-    
+
     def analyze_lasso(self) -> None:
         for position in range(-1, -MIN_LEN - 1, -1):
             print(f"Analyzing position: {position}")
@@ -241,13 +279,41 @@ class ComponentAnalyzer:
             # Compute dot activations
             (harmless_outputs_train, harmful_outputs_train,
              harmless_outputs_test, harmful_outputs_test) = self._compute_dot_activations(
-                position, data_subsets, cache_norms=True
+                position, data_subsets, cache_norms=True, get_aggregated_vector=True
             )
-            
-            harmless_dots_train, harmless_norms_train = harmless_outputs_train
-            harmful_dots_train, harmful_norms_train = harmful_outputs_train
-            harmless_dots_test, harmless_norms_test = harmless_outputs_test
-            harmful_dots_test, harmful_norms_test = harmful_outputs_test
+
+            harmless_dots_train, harmless_norms_train, harmless_agg_train = harmless_outputs_train
+            harmful_dots_train, harmful_norms_train, harmful_agg_train = harmful_outputs_train
+            harmless_dots_test, harmless_norms_test, harmless_agg_test = harmless_outputs_test
+            harmful_dots_test, harmful_norms_test, harmful_agg_test = harmful_outputs_test
+
+            # Cosine similarity with component wise diff-in-means
+            refusal_dir_cpu = self.model_bundle.refusal_direction.cpu()
+            similarities = {}
+
+            for component_name in harmless_agg_train.keys():
+                agg_train_harmless = harmless_agg_train[component_name]
+                agg_train_harmful = harmful_agg_train[component_name]
+
+                component_diff_in_means = agg_train_harmful - agg_train_harmless
+                similarities[component_name] = torch.nn.functional.cosine_similarity(
+                    refusal_dir_cpu, component_diff_in_means, dim=0
+                ).item()
+
+            sorted_components = sorted(
+                similarities.items(),
+                key=lambda x: abs(x[1]),
+                reverse=True
+            )
+
+            print()
+            print(f"Cosine similarity with component wise diff-in-means")
+            for component_name, similarity in sorted_components:
+                print(f"{component_name}: {similarity:.4f}")
+
+
+            print()
+            print(f"Running Linear Regression on harmless set")
 
             # Run Lasso regression
             r2_harmless, coef_harmless, intercept_harmless, train_feature_names = self.predictor.lr_components_and_norms(
@@ -258,10 +324,16 @@ class ComponentAnalyzer:
             )
 
             print()
-            print(f"Feature names: {train_feature_names}")
-            print(f"Harmless coeffs: {coef_harmless}")
+            names_and_coeffs = list(zip(train_feature_names, coef_harmless))
+            names_and_coeffs.sort(key=lambda x: abs(x[1]), reverse=True)
+            print(f"Most important features in the harmless set (showing only non-zero coefficients):")
+            for name, coeff in names_and_coeffs:
+                if coeff != 0:
+                    print(f"{name}: {coeff}")
             print(f"Harmless intercept: {intercept_harmless:.4f}")
             print(f"Harmless R²: {r2_harmless:.4f}")
+
+            print(f"Running Linear Regression on harmful set")
 
             r2_harmful, coef_harmful, intercept_harmful, _ = self.predictor.lr_components_and_norms(
                 harmful_dots_train,
@@ -270,7 +342,13 @@ class ComponentAnalyzer:
                 harmful_norms_test
             )
 
-            print(f"Harmful coeffs: {coef_harmful}")
+            names_and_coeffs = list(zip(train_feature_names, coef_harmful))
+            names_and_coeffs.sort(key=lambda x: abs(x[1]), reverse=True)
+            print()
+            print(f"Most important features in the harmful set (showing only non-zero coefficients):")
+            for name, coeff in names_and_coeffs:
+                if coeff != 0:
+                    print(f"{name}: {coeff:.4f}")
             print(f"Harmful intercept: {intercept_harmful:.4f}")
             print(f"Harmful R²: {r2_harmful:.4f}")
 

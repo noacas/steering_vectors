@@ -1,5 +1,6 @@
 import gc
 import copy
+from collections import defaultdict
 
 import torch
 from tqdm import tqdm
@@ -48,7 +49,7 @@ def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False, get_aggrega
     hook_names.append(f"blocks.0.hook_resid_pre")
 
     if get_aggregated_vector:
-        aggregated_vector = torch.zeros_like(refusal_dir, device=DEVICE)
+        aggregated_vector_dict = defaultdict(lambda : torch.zeros_like(refusal_dir, device='cpu'))
 
     # TODO: Batching
     for text in tqdm(dataset, desc="Caching Activations"):
@@ -68,11 +69,11 @@ def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False, get_aggrega
                         cache[component_name],
                         refusal_dir.type(cache[component_name].dtype),
                     ).detach().cpu()[0 , pos].item()
-                cache[component_name] = component_dot_product
                 if cache_norms:
                     norm_cache[component_name] = torch.norm(cache[component_name], dim=-1).detach().cpu()[0, pos].item()
                 if get_aggregated_vector:
-                    aggregated_vector += cache[component_name][:, pos, :].sum(dim=0).detach().cpu()
+                    aggregated_vector_dict[component_name] += cache[component_name][:, pos, :].sum(dim=0).detach().cpu()
+                cache[component_name] = component_dot_product
 
             # Remove from GPU to avoid OOM
             # This is probably bad and slow, FIX ME
@@ -87,7 +88,10 @@ def get_dot_act(model, dataset, pos, refusal_dir, cache_norms=False, get_aggrega
     if cache_norms:
         outputs.append(output_norm)
     if get_aggregated_vector:
-        outputs.append(aggregated_vector)
+        for k in aggregated_vector_dict.keys():
+            aggregated_vector_dict[k] /= len(dataset)
+
+        outputs.append(aggregated_vector_dict)
 
     # output_prod[example][component_name] = dot product of component component_name with refusal dir for text example i at position pos
     return tuple(outputs)
