@@ -1,0 +1,16 @@
+pyvene/axbench-concept16k
+
+chosen_concepts = {
+    1:  "references to food and drink options",
+    2:  "references to personal relationships and emotional connections",
+    3:  "references to role models and their impacts on others",
+    4:  "terms related to weather and climate data",
+    5:  "phrases related to music and entertainment industry events",
+    6:  "conditions and scenarios involving accidents or harmful situations",
+    7:  "references to specific individuals and events in political contexts",
+    8:  "phrases expressing uncertainty or hesitation",
+    9:  "sentences expressing personal opinions or experiences",
+    10: "words expressing strong emotions or states of feeling",
+    11: "phrases expressing hope and helpfulness",
+    12: "words expressing strong opinions or calls to action"
+}
