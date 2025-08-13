@@ -1,0 +1,28 @@
+/home/joberant/NLP_2425b/troyansky1/nlpenv/lib/python3.9/site-packages/transformers/utils/hub.py:111: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files:  50%|█████     | 1/2 [00:41<00:41, 41.90s/it]Fetching 2 files: 100%|██████████| 2/2 [00:41<00:00, 20.95s/it]
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:00<00:00,  1.44it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:00<00:00,  2.84it/s]
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+Generating train split:   0%|          | 0/52002 [00:00<?, ? examples/s]Generating train split:  87%|████████▋ | 45000/52002 [00:00<00:00, 446649.20 examples/s]Generating train split: 100%|██████████| 52002/52002 [00:00<00:00, 467814.00 examples/s]
+Traceback (most recent call last):
+  File "/vol/joberant_nobck/data/NLP_368307701_2425b/troyansky1/steering_vectors/main.py", line 19, in <module>
+    main()
+  File "/vol/joberant_nobck/data/NLP_368307701_2425b/troyansky1/steering_vectors/main.py", line 15, in main
+    predict_dot_product_lasso(model_bundle=model_bundle)
+  File "/vol/joberant_nobck/data/NLP_368307701_2425b/troyansky1/steering_vectors/analysis.py", line 619, in predict_dot_product_lasso
+    analyzer.analyze_lasso()
+  File "/vol/joberant_nobck/data/NLP_368307701_2425b/troyansky1/steering_vectors/analysis.py", line 281, in analyze_lasso
+    data_subsets = self._get_subset_data()
+  File "/vol/joberant_nobck/data/NLP_368307701_2425b/troyansky1/steering_vectors/analysis.py", line 193, in _get_subset_data
+    subset_len = len(self.model_bundle.harmful_inst_train)
+AttributeError: 'ModelBundle' object has no attribute 'harmful_inst_train'
+slurmstepd: error: _cgroup_procs_check: failed on path (null)/cgroup.procs: No such file or directory
+slurmstepd: error: Cannot write to cgroup.procs for (null)
+slurmstepd: error: Unable to move pid 2674151 to init root cgroup (null)
