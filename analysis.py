@@ -288,7 +288,7 @@ class ComponentAnalyzer:
             harmful_dots_test, harmful_norms_test, harmful_agg_test = harmful_outputs_test
 
             # Cosine similarity with component wise diff-in-means
-            refusal_dir_cpu = self.model_bundle.refusal_direction.cpu()
+            refusal_dir_cpu = self.model_bundle.direction.cpu()
             similarities = {}
 
             for component_name in harmless_agg_train.keys():
