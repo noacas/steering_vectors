@@ -202,7 +202,7 @@ class ComponentAnalyzer:
         harmless_train, harmful_train, harmless_test, harmful_test = data_subsets
 
         model = self.model_bundle.model
-        refusal_direction = self.model_bundle.refusal_direction
+        refusal_direction = self.model_bundle.direction
 
         return (
             get_dot_act(model, harmless_train, position, refusal_direction,
