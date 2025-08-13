@@ -12,6 +12,7 @@ if torch.cuda.is_available():
 #     DEVICE = 'mps'
 LAYER_GEMMA1 = 10  # The location is taken from the corresponding json from the project's source
 LAYER_GEMMA2 = 20
+LAYER = LAYER_GEMMA2 # TODO: change to LAYER_GEMMA1 for gemma1
 MIN_LEN = 3  # Minimum length of the instruction to consider
 
 GEMMA_2_HOOK_NAMES = (

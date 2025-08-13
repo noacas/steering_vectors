@@ -26,14 +26,12 @@ def main():
 
     # GEMMA and harmfull steering vector
     if GEMMA in args.models:
-        LAYER = LAYER_GEMMA1
         model_bundle.load_model(GEMMA)
         model_bundle.load_steering_vector("harmfull")
         predict_dot_product_lasso(model_bundle=model_bundle)
 
     # for GEMMA2 all steering vectors in dir content/axbench_chosen_dataset/
     if GEMMA2 in args.models:
-        LAYER = LAYER_GEMMA2
         model_bundle.load_model(GEMMA2)
         for steering_vector in get_steering_vector_names_for_gemma2():
             model_bundle.load_steering_vector(steering_vector)
