@@ -99,7 +99,7 @@ class ComponentPredictor:
 
     def _fit_lasso(self, X_train: np.ndarray, y_train: np.ndarray) -> RegressorMixin:
         """Fit Lasso regression and return the model."""
-        lasso = Lasso(alpha=0.05, max_iter=10000)
+        lasso = Lasso(alpha=0.12, max_iter=10000)
         lasso.fit(X_train, y_train)
         return lasso
 
