@@ -58,8 +58,7 @@ def get_instructions_from_path(name: str):
     if not os.path.isfile(path):
         raise FileNotFoundError(f'Could not find {path}')
     dataset = torch.load(path, map_location=DEVICE)
-    instructions = dataset.tolist()
-    train, test = train_test_split(instructions, test_size=0.2, random_state=42)
+    train, test = train_test_split(dataset, test_size=0.2, random_state=42)
     return train, test
 
 
