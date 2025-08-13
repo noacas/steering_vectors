@@ -188,7 +188,7 @@ class ComponentAnalyzer:
 
     def _get_subset_data(self) -> Tuple[List, List, List, List]:
         """Get balanced subsets of training and test data."""
-        subset_len = len(self.model_bundle.harmful_inst_train)
+        subset_len = len(self.model_bundle.positive_inst_train)
 
         return (
             self.model_bundle.negative_inst_train[:subset_len],
