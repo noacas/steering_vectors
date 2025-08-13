@@ -53,6 +53,16 @@ def get_harmless_instructions():
     return train, test
 
 
+def get_random_negative_instructions():
+    path = 'content/axbench_chosen_dataset/EEEE_inputs.pt'
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f'Could not find {path}')
+    dataset = torch.load(path, map_location=DEVICE)
+    instructions = dataset.tolist()
+    train, test = train_test_split(instructions, test_size=0.2, random_state=42)
+    return train, test
+
+
 def get_positive_instructions(steering_vector):
     if steering_vector == "harmfull":
         return get_harmful_instructions()
@@ -63,8 +73,8 @@ def get_negative_instructions(steering_vector):
     if steering_vector == "harmfull":
         return get_harmless_instructions()
     else:
-        # TODO: add random of 
-        return None
+        return get_random_negative_instructions()
+
 
 def get_direction(steering_vector):
     # Code to take refusal direction
@@ -113,16 +123,9 @@ class ModelBundle:
         return results_dir
     
     def load_steering_vector(self, steering_vector: str):
-        # todo: varify steering vector is valid for model
-        if (self.model_name == GEMMA and steering_vector in STEERING_VECTOR_FOR_GEMMA) \
-                or (self.model_name == GEMMA2 and steering_vector not in STEERING_VECTOR_FOR_GEMMA):
-            self.steering_vector = steering_vector
-            self.direction = get_direction(self.model, steering_vector)
-            self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
-            self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
-            return True
-        
-        return False
+        self.direction = get_direction(self.model, steering_vector)
+        self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
+        self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
     
     def load_model(self, model: str):
         self.model_name = model
