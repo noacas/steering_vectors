@@ -62,21 +62,17 @@ def get_instructions_from_path(name: str):
     return train, test
 
 
-def get_negative_instructions():
-    return get_instructions_from_path("EEEE")
-
-
 def get_positive_instructions(steering_vector):
     if steering_vector == "harmfull":
         return get_harmful_instructions()
-    raise ValueError(f"Steering vector {steering_vector} not found")
+    return get_instructions_from_path(steering_vector)
 
 
 def get_negative_instructions(steering_vector):
     if steering_vector == "harmfull":
         return get_harmless_instructions()
     else:
-        return get_negative_instructions()
+        return get_instructions_from_path("EEEE")
 
 
 def get_direction(steering_vector):
