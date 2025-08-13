@@ -1,6 +1,8 @@
 """
 Where do steering vectors come from
 """
+from analysis import compare_component_prediction_r2
+from analysis import predict_dot_product_lasso
 from analysis import compare_component_prediction_r2, predict_dot_product_lasso
 from model import ModelBundle
 from consts import GEMMA, GEMMA2
@@ -21,6 +23,9 @@ def get_steering_vector_names_for_gemma2():
 
 def main():
     # Load the model bundle
+    model_bundle = ModelBundle(args.model, args.steering_vector)
+    #compare_component_prediction_r2(model_bundle=model_bundle)
+    predict_dot_product_lasso(model_bundle=model_bundle)
     args = parse_args()
     model_bundle = ModelBundle()
 

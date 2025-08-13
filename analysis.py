@@ -2,6 +2,8 @@ import itertools
 import os
 from typing import Dict, List, Tuple, Any
 from dataclasses import dataclass
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 import numpy as np
 import pandas as pd
@@ -269,7 +271,9 @@ class ComponentAnalyzer:
             harmless_r2s_df=harmless_r2s_df
         )
 
-    def analyze_lasso(self) -> None:
+    def analyze_lasso(self) -> pd.DataFrame:
+        lasso_results = []
+
         for position in range(-1, -MIN_LEN - 1, -1):
             print(f"Analyzing position: {position}")
 
@@ -351,6 +355,194 @@ class ComponentAnalyzer:
                     print(f"{name}: {coeff:.4f}")
             print(f"Harmful intercept: {intercept_harmful:.4f}")
             print(f"Harmful R²: {r2_harmful:.4f}")
+
+            position_results = {
+            'position': position,
+            'harmless_r2': r2_harmless,
+            'harmful_r2': r2_harmful,
+            'harmless_intercept': intercept_harmless,
+            'harmful_intercept': intercept_harmful
+            }
+        
+            # Add cosine similarities
+            for component_name, similarity in similarities.items():
+                position_results[f'cosine_sim_{component_name}'] = similarity
+                
+            # Add Lasso coefficients
+            for name, coeff in zip(train_feature_names, coef_harmless):
+                position_results[f'harmless_coef_{name}'] = coeff
+            for name, coeff in zip(train_feature_names, coef_harmful):
+                position_results[f'harmful_coef_{name}'] = coeff
+                
+            lasso_results.append(position_results)
+            
+        results_df = pd.DataFrame(lasso_results)
+        results_df.to_csv(os.path.join(self.model_bundle.results_dir, 'lasso_analysis.csv'), index=False)
+        
+        # Create visualizations
+        self.visualize_lasso_results(results_df)
+        
+        # Create summary table
+        summary_df = self.create_summary_table(results_df)
+        print("\nSummary Table:")
+        print(summary_df.round(4))
+        
+        return results_df
+
+    def visualize_lasso_results(self, results_df: pd.DataFrame) -> None:
+        """Create comprehensive visualizations for Lasso analysis results."""
+        
+        # Set up the plotting style
+        plt.style.use('default')
+        fig = plt.figure(figsize=(20, 16))
+        
+        # 1. R² scores across positions
+        ax1 = plt.subplot(2, 3, 1)
+        positions = results_df['position'].values
+        plt.plot(positions, results_df['harmless_r2'], 'o-', label='Harmless R²', linewidth=2)
+        plt.plot(positions, results_df['harmful_r2'], 's-', label='Harmful R²', linewidth=2)
+        plt.xlabel('Position')
+        plt.ylabel('R² Score')
+        plt.title('Lasso R² Scores Across Positions')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        
+        # 2. Top cosine similarities heatmap
+        cosine_cols = [col for col in results_df.columns if col.startswith('cosine_sim_')]
+        if cosine_cols:
+            ax2 = plt.subplot(2, 3, 2)
+            cosine_data = results_df[['position'] + cosine_cols].set_index('position')
+            cosine_data.columns = [col.replace('cosine_sim_', '') for col in cosine_data.columns]
+            
+            # Show only top components by max absolute similarity
+            max_similarities = cosine_data.abs().max(axis=0).sort_values(ascending=False)
+            top_components = max_similarities.head(10).index
+            
+            sns.heatmap(cosine_data[top_components].T, 
+                    annot=True, fmt='.3f', cmap='RdBu_r', center=0,
+                    ax=ax2, cbar_kws={'label': 'Cosine Similarity'})
+            plt.title('Top 10 Component Cosine Similarities')
+            plt.xlabel('Position')
+            plt.ylabel('Component')
+        
+        # 3. Non-zero coefficients count
+        ax3 = plt.subplot(2, 3, 3)
+        harmless_coef_cols = [col for col in results_df.columns if col.startswith('harmless_coef_')]
+        harmful_coef_cols = [col for col in results_df.columns if col.startswith('harmful_coef_')]
+        
+        harmless_nonzero = (results_df[harmless_coef_cols] != 0).sum(axis=1)
+        harmful_nonzero = (results_df[harmful_coef_cols] != 0).sum(axis=1)
+        
+        plt.plot(positions, harmless_nonzero, 'o-', label='Harmless', linewidth=2)
+        plt.plot(positions, harmful_nonzero, 's-', label='Harmful', linewidth=2)
+        plt.xlabel('Position')
+        plt.ylabel('Number of Non-zero Coefficients')
+        plt.title('Lasso Sparsity Across Positions')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        
+        # 4. Top coefficients by position (harmless)
+        ax4 = plt.subplot(2, 3, 4)
+        if harmless_coef_cols:
+            harmless_coef_data = results_df[['position'] + harmless_coef_cols].set_index('position')
+            harmless_coef_data.columns = [col.replace('harmless_coef_', '') for col in harmless_coef_data.columns]
+            
+            # Show components with highest max absolute coefficients
+            max_coefs = harmless_coef_data.abs().max(axis=0).sort_values(ascending=False)
+            top_coef_components = max_coefs.head(8).index
+            
+            sns.heatmap(harmless_coef_data[top_coef_components].T,
+                    annot=True, fmt='.3f', cmap='RdBu_r', center=0,
+                    ax=ax4, cbar_kws={'label': 'Coefficient Value'})
+            plt.title('Top Harmless Lasso Coefficients')
+            plt.xlabel('Position')
+            plt.ylabel('Component')
+        
+        # 5. Top coefficients by position (harmful)
+        ax5 = plt.subplot(2, 3, 5)
+        if harmful_coef_cols:
+            harmful_coef_data = results_df[['position'] + harmful_coef_cols].set_index('position')
+            harmful_coef_data.columns = [col.replace('harmful_coef_', '') for col in harmful_coef_data.columns]
+            
+            # Show components with highest max absolute coefficients
+            max_coefs = harmful_coef_data.abs().max(axis=0).sort_values(ascending=False)
+            top_coef_components = max_coefs.head(8).index
+            
+            sns.heatmap(harmful_coef_data[top_coef_components].T,
+                    annot=True, fmt='.3f', cmap='RdBu_r', center=0,
+                    ax=ax5, cbar_kws={'label': 'Coefficient Value'})
+            plt.title('Top Harmful Lasso Coefficients')
+            plt.xlabel('Position')
+            plt.ylabel('Component')
+        
+        # 6. Coefficient comparison scatter plot
+        ax6 = plt.subplot(2, 3, 6)
+        if harmless_coef_cols and harmful_coef_cols:
+            # Get coefficients for the most recent position
+            recent_pos_idx = results_df['position'].idxmax()
+            
+            harmless_recent = results_df.loc[recent_pos_idx, harmless_coef_cols].values
+            harmful_recent = results_df.loc[recent_pos_idx, harmful_coef_cols].values
+            
+            plt.scatter(harmless_recent, harmful_recent, alpha=0.7)
+            plt.xlabel('Harmless Coefficients')
+            plt.ylabel('Harmful Coefficients')
+            plt.title(f'Coefficient Comparison (Position {results_df.loc[recent_pos_idx, "position"]})')
+            
+            # Add diagonal line
+            max_val = max(np.abs(harmless_recent).max(), np.abs(harmful_recent).max())
+            plt.plot([-max_val, max_val], [-max_val, max_val], 'r--', alpha=0.5)
+            plt.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        # Save the plot
+        plt.savefig(os.path.join(self.model_bundle.results_dir, 'lasso_analysis_plots.png'), 
+                    dpi=300, bbox_inches='tight')
+        plt.show()
+
+    def create_summary_table(self, results_df: pd.DataFrame) -> pd.DataFrame:
+        """Create a summary table of key findings."""
+        
+        summary_data = []
+        
+        for _, row in results_df.iterrows():
+            position = row['position']
+            
+            # Get top cosine similarities
+            cosine_cols = [col for col in results_df.columns if col.startswith('cosine_sim_')]
+            if cosine_cols:
+                cosine_values = {col.replace('cosine_sim_', ''): row[col] for col in cosine_cols}
+                top_cosine = max(cosine_values.items(), key=lambda x: abs(x[1]))
+            
+            # Get top coefficients
+            harmless_coef_cols = [col for col in results_df.columns if col.startswith('harmless_coef_')]
+            harmful_coef_cols = [col for col in results_df.columns if col.startswith('harmful_coef_')]
+            
+            if harmless_coef_cols:
+                harmless_coefs = {col.replace('harmless_coef_', ''): row[col] for col in harmless_coef_cols}
+                top_harmless_coef = max(harmless_coefs.items(), key=lambda x: abs(x[1]))
+            
+            if harmful_coef_cols:
+                harmful_coefs = {col.replace('harmful_coef_', ''): row[col] for col in harmful_coef_cols}
+                top_harmful_coef = max(harmful_coefs.items(), key=lambda x: abs(x[1]))
+            
+            summary_data.append({
+                'position': position,
+                'harmless_r2': row['harmless_r2'],
+                'harmful_r2': row['harmful_r2'],
+                'top_cosine_component': top_cosine[0] if cosine_cols else 'N/A',
+                'top_cosine_value': top_cosine[1] if cosine_cols else 0,
+                'top_harmless_component': top_harmless_coef[0] if harmless_coef_cols else 'N/A',
+                'top_harmless_coef': top_harmless_coef[1] if harmless_coef_cols else 0,
+                'top_harmful_component': top_harmful_coef[0] if harmful_coef_cols else 'N/A',
+                'top_harmful_coef': top_harmful_coef[1] if harmful_coef_cols else 0,
+            })
+        
+        summary_df = pd.DataFrame(summary_data)
+        summary_df.to_csv(os.path.join(self.model_bundle.results_dir, 'lasso_summary.csv'), index=False)
+        
+        return summary_df
 
     def run_analysis(self) -> ComponentAnalysisResults:
         """Run the complete component analysis."""
