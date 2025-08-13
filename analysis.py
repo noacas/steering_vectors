@@ -14,7 +14,7 @@ import torch
 
 from scipy.stats import pearsonr
 
-from consts import MIN_LEN
+from consts import MIN_LEN, LAYER
 from dot_act import get_dot_act, get_mean_dot_prod, get_act
 from model import ModelBundle
 from utils import dict_subtraction
@@ -32,7 +32,7 @@ class ComponentAnalysisResults:
 class ComponentPredictor:
     """Handles component prediction analysis using linear regression."""
 
-    def __init__(self, residual_stream_component: str = 'blocks.10.hook_resid_pre'):
+    def __init__(self, residual_stream_component: str = f'blocks.{LAYER}.hook_resid_pre'):
         self.residual_stream_component = residual_stream_component
 
     def _extract_dot_products(self, dot_prod_dict: List[Dict], component_name: str) -> np.ndarray:
