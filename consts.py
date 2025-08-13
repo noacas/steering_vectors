@@ -11,7 +11,7 @@ if torch.cuda.is_available():
 # elif torch.backends.mps.is_available():
 #     DEVICE = 'mps'
 LAYER = 10  # The location is taken from the corresponding json from the project's source
-MIN_LEN = 5  # Minimum length of the instruction to consider
+MIN_LEN = 3  # Minimum length of the instruction to consider
 
 GEMMA_2_HOOK_NAMES = (
             [f"blocks.{i}.ln1_post.hook_normalized" for i in range(LAYER)] +
