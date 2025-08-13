@@ -10,6 +10,7 @@ from sklearn.base import RegressorMixin
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+import torch
 
 from scipy.stats import pearsonr
 
