@@ -53,14 +53,18 @@ def get_harmless_instructions():
     return train, test
 
 
-def get_random_negative_instructions():
-    path = 'content/axbench_chosen_dataset/EEEE_inputs.pt'
+def get_instructions_from_path(name: str):
+    path = f'content/axbench_chosen_dataset/{name}_inputs.pt'
     if not os.path.isfile(path):
         raise FileNotFoundError(f'Could not find {path}')
     dataset = torch.load(path, map_location=DEVICE)
     instructions = dataset.tolist()
     train, test = train_test_split(instructions, test_size=0.2, random_state=42)
     return train, test
+
+
+def get_negative_instructions():
+    return get_instructions_from_path("EEEE")
 
 
 def get_positive_instructions(steering_vector):
@@ -73,7 +77,7 @@ def get_negative_instructions(steering_vector):
     if steering_vector == "harmfull":
         return get_harmless_instructions()
     else:
-        return get_random_negative_instructions()
+        return get_negative_instructions()
 
 
 def get_direction(steering_vector):
@@ -129,5 +133,9 @@ class ModelBundle:
     
     def load_model(self, model: str):
         self.model_name = model
+        if self.model is not None:
+            del self.model
+        torch.cuda.empty_cache()
         self.model, self.hook_names = load_model(model)
         return True
+    
