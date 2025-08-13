@@ -82,12 +82,15 @@ def get_negative_instructions(steering_vector):
 def get_direction(steering_vector):
     # Code to take refusal direction
     if steering_vector == "harmfull":
-        refusal_path = f'content/{steering_vector}_direction.pt'
-        if not os.path.isfile(refusal_path):
-            raise FileNotFoundError(f'Could not find {refusal_path}')
-        refusal_dir = torch.load(refusal_path, map_location=DEVICE)
-        refusal_dir /= torch.norm(refusal_dir)
-        return refusal_dir
+        path = f'content/{steering_vector}_direction.pt'
+    else:
+        path = f'content/axbench_chosen_dataset/{steering_vector}_vec.pt'
+
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f'Could not find {path}')
+    direction = torch.load(path, map_location=DEVICE)
+    direction /= torch.norm(direction)
+    return direction
 
 
 class ModelBundle:
