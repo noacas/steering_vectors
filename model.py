@@ -10,17 +10,17 @@ from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 from transformer_lens import HookedTransformer, utils
 
-from consts import HF_TOKEN, DEVICE, GEMMA_MODEL_PATH, GEMMA_2_MODEL_PATH, GEMMA_1_HOOK_NAMES, GEMMA_2_HOOK_NAMES
+from consts import HF_TOKEN, DEVICE, GEMMA_MODEL_PATH, GEMMA_2_MODEL_PATH, GEMMA_1_HOOK_NAMES, GEMMA_2_HOOK_NAMES, GEMMA, GEMMA2, STEERING_VECTOR_FOR_GEMMA
 
 
 def load_model(model):
     """
     Load the model from the specified path and device.
     """
-    if model == "gemma":
+    if model == GEMMA:
         model_path = GEMMA_MODEL_PATH
         hook_names = GEMMA_1_HOOK_NAMES
-    if model == 'gemma2':
+    elif model == GEMMA2:
         model_path = GEMMA_2_MODEL_PATH
         hook_names = GEMMA_2_HOOK_NAMES
 
@@ -62,12 +62,13 @@ def get_positive_instructions(steering_vector):
 def get_negative_instructions(steering_vector):
     if steering_vector == "harmfull":
         return get_harmless_instructions()
-    raise ValueError(f"Steering vector {steering_vector} not found")
+    else:
+        # TODO: add random of 
+        return None
 
-
-def get_direction(model, steering_vector):
+def get_direction(steering_vector):
     # Code to take refusal direction
-    if model == "gemma" and steering_vector == "harmfull":
+    if steering_vector == "harmfull":
         refusal_path = f'content/{steering_vector}_direction.pt'
         if not os.path.isfile(refusal_path):
             raise FileNotFoundError(f'Could not find {refusal_path}')
@@ -82,12 +83,14 @@ class ModelBundle:
     for easy passing to functions and methods.
     """
 
-    def __init__(self, model, steering_vector, results_dir=None,
+    def __init__(self, results_dir=None,
                  auto_create_results_dir=True):
-        self.model, self.hook_names = load_model(model)
-        self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
-        self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
-        self.direction = get_direction(model, steering_vector)
+        self.model_name = None
+        self.model, self.hook_names = None, None
+        self.steering_vector = None
+        self.positive_inst_train, self.positive_inst_test = None, None
+        self.negative_inst_train, self.negative_inst_test = None, None
+        self.direction = None
 
         # Set up results directorys
         if results_dir is None and auto_create_results_dir:
@@ -108,3 +111,20 @@ class ModelBundle:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         results_dir = f"results_{timestamp}"
         return results_dir
+    
+    def load_steering_vector(self, steering_vector: str):
+        # todo: varify steering vector is valid for model
+        if (self.model_name == GEMMA and steering_vector in STEERING_VECTOR_FOR_GEMMA) \
+                or (self.model_name == GEMMA2 and steering_vector not in STEERING_VECTOR_FOR_GEMMA):
+            self.steering_vector = steering_vector
+            self.direction = get_direction(self.model, steering_vector)
+            self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
+            self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
+            return True
+        
+        return False
+    
+    def load_model(self, model: str):
+        self.model_name = model
+        self.model, self.hook_names = load_model(model)
+        return True

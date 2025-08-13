@@ -257,10 +257,10 @@ class ComponentAnalyzer:
         harmless_r2s_df = pd.DataFrame(harmless_dict)
 
         # Save to CSV
-        train_df.to_csv(os.path.join(results_dir, 'train_df.csv'))
-        test_df.to_csv(os.path.join(results_dir, 'test_df.csv'))
-        harmful_r2s_df.to_csv(os.path.join(results_dir, 'harmful_r2s.csv'))
-        harmless_r2s_df.to_csv(os.path.join(results_dir, 'harmless_r2s.csv'))
+        train_df.to_csv(os.path.join(results_dir, f'{self.model_bundle.steering_vector}_train_df.csv'))
+        test_df.to_csv(os.path.join(results_dir, f'{self.model_bundle.steering_vector}_test_df.csv'))
+        harmful_r2s_df.to_csv(os.path.join(results_dir, f'{self.model_bundle.steering_vector}_harmful_r2s.csv'))
+        harmless_r2s_df.to_csv(os.path.join(results_dir, f'{self.model_bundle.steering_vector}_harmless_r2s.csv'))
 
         return ComponentAnalysisResults(
             train_df=train_df,
