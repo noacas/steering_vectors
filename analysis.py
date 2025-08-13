@@ -201,7 +201,7 @@ class ComponentAnalyzer:
         """Compute dot product activations for all data subsets at given position."""
         harmless_train, harmful_train, harmless_test, harmful_test = data_subsets
 
-        model = self.model_bundle.model
+        model = self.model_bundle
         refusal_direction = self.model_bundle.direction
 
         return (
