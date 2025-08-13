@@ -10,7 +10,7 @@ from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 from transformer_lens import HookedTransformer, utils
 
-from consts import HF_TOKEN, DEVICE, GEMMA_MODEL_PATH, GEMMA_2_MODEL_PATH, GEMMA_1_HOOK_NAMES, GEMMA_2_HOOK_NAMES, GEMMA, GEMMA2, STEERING_VECTOR_FOR_GEMMA
+from consts import HF_TOKEN, DEVICE, GEMMA_MODEL_PATH, GEMMA_2_MODEL_PATH, GEMMA_1_HOOK_NAMES, GEMMA_2_HOOK_NAMES, GEMMA, GEMMA2
 
 
 def load_model(model):
