@@ -5,7 +5,7 @@ from collections import defaultdict
 import torch
 from tqdm import tqdm
 
-from consts import LAYER, DEVICE
+from consts import DEVICE
 from model import ModelBundle
 
 
