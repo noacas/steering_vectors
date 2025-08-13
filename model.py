@@ -129,7 +129,7 @@ class ModelBundle:
         return results_dir
     
     def load_steering_vector(self, steering_vector: str):
-        self.direction = get_direction(self.model, steering_vector)
+        self.direction = get_direction(steering_vector)
         self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
         self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
     
