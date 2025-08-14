@@ -12,10 +12,11 @@ from sklearn.base import RegressorMixin
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+import torch
 
 from scipy.stats import pearsonr
 
-from consts import MIN_LEN
+from consts import MIN_LEN, LAYER
 from dot_act import get_dot_act, get_mean_dot_prod, get_act
 from model import ModelBundle
 from utils import dict_subtraction
@@ -33,7 +34,7 @@ class ComponentAnalysisResults:
 class ComponentPredictor:
     """Handles component prediction analysis using linear regression."""
 
-    def __init__(self, residual_stream_component: str = 'blocks.10.hook_resid_pre'):
+    def __init__(self, residual_stream_component: str = f'blocks.{LAYER}.hook_resid_pre'):
         self.residual_stream_component = residual_stream_component
 
     def _extract_dot_products(self, dot_prod_dict: List[Dict], component_name: str) -> np.ndarray:
@@ -100,7 +101,7 @@ class ComponentPredictor:
 
     def _fit_lasso(self, X_train: np.ndarray, y_train: np.ndarray) -> RegressorMixin:
         """Fit Lasso regression and return the model."""
-        lasso = Lasso(alpha=0.05, max_iter=10000)
+        lasso = Lasso(alpha=0.12, max_iter=10000)
         lasso.fit(X_train, y_train)
         return lasso
 
@@ -203,8 +204,8 @@ class ComponentAnalyzer:
         """Compute dot product activations for all data subsets at given position."""
         harmless_train, harmful_train, harmless_test, harmful_test = data_subsets
 
-        model = self.model_bundle.model
-        refusal_direction = self.model_bundle.refusal_direction
+        model = self.model_bundle
+        refusal_direction = self.model_bundle.direction
 
         return (
             get_dot_act(model, harmless_train, position, refusal_direction,
@@ -292,7 +293,7 @@ class ComponentAnalyzer:
             harmful_dots_test, harmful_norms_test, harmful_agg_test = harmful_outputs_test
 
             # Cosine similarity with component wise diff-in-means
-            refusal_dir_cpu = self.model_bundle.refusal_direction.cpu()
+            refusal_dir_cpu = self.model_bundle.direction.cpu()
             similarities = {}
 
             for component_name in harmless_agg_train.keys():

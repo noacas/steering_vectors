@@ -62,21 +62,17 @@ def get_instructions_from_path(name: str):
     return train, test
 
 
-def get_negative_instructions():
-    return get_instructions_from_path("EEEE")
-
-
 def get_positive_instructions(steering_vector):
     if steering_vector == "harmfull":
         return get_harmful_instructions()
-    raise ValueError(f"Steering vector {steering_vector} not found")
+    return get_instructions_from_path(steering_vector)
 
 
 def get_negative_instructions(steering_vector):
     if steering_vector == "harmfull":
         return get_harmless_instructions()
     else:
-        return get_negative_instructions()
+        return get_instructions_from_path("EEEE")
 
 
 def get_direction(steering_vector):
@@ -129,7 +125,7 @@ class ModelBundle:
         return results_dir
     
     def load_steering_vector(self, steering_vector: str):
-        self.direction = get_direction(self.model, steering_vector)
+        self.direction = get_direction(steering_vector)
         self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
         self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
     
