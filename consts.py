@@ -26,7 +26,7 @@ GEMMA_2 = "gemma2"
 GEMMA_2_MODEL_PATH = 'google/gemma-2-2b-it'
 GEMMA_2_LAYER = 20
 GEMMA_2_HOOK_NAMES = (
-            [f"blocks.{i}.ln1_post.hook_normalized" for i in range(GEMMA_2_LAYER+1)] +
-            [f"blocks.{i}.ln2_post.hook_normalized" for i in range(GEMMA_2_LAYER+1)] +
+            [f"blocks.{i}.ln1_post.hook_normalized" for i in range(GEMMA_2_LAYER + 1)] +
+            [f"blocks.{i}.ln2_post.hook_normalized" for i in range(GEMMA_2_LAYER + 1)] +
             [f"blocks.{GEMMA_2_LAYER}.hook_resid_post", "blocks.0.hook_resid_post"]
     ) 
