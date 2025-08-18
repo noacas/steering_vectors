@@ -1,28 +1,30 @@
 import os
-
 import huggingface_hub
 import torch
 import requests
 import pandas as pd
 import io
-
 from datasets import load_dataset
 from sklearn.model_selection import train_test_split
-from transformer_lens import HookedTransformer, utils
+from transformer_lens import HookedTransformer
+from datetime import datetime
+from consts import GEMMA_1, GEMMA_1_MODEL_PATH, GEMMA_1_HOOK_NAMES, GEMMA_1_LAYER, \
+    GEMMA_2, GEMMA_2_MODEL_PATH, GEMMA_2_HOOK_NAMES, GEMMA_2_LAYER, DEVICE, HF_TOKEN
 
-from consts import HF_TOKEN, DEVICE, GEMMA_MODEL_PATH, GEMMA_2_MODEL_PATH, GEMMA_1_HOOK_NAMES, GEMMA_2_HOOK_NAMES, GEMMA, GEMMA2
 
-
-def load_model(model):
+def get_model_attr(model_name: str):
     """
     Load the model from the specified path and device.
     """
-    if model == GEMMA:
-        model_path = GEMMA_MODEL_PATH
+    if model_name == GEMMA_1:
+        model_path = GEMMA_1_MODEL_PATH
         hook_names = GEMMA_1_HOOK_NAMES
-    elif model == GEMMA2:
+        layer = GEMMA_1_LAYER
+
+    elif model_name == GEMMA_2:
         model_path = GEMMA_2_MODEL_PATH
         hook_names = GEMMA_2_HOOK_NAMES
+        layer = GEMMA_2_LAYER
 
     huggingface_hub.login(token=HF_TOKEN)
     model = HookedTransformer.from_pretrained_no_processing(
@@ -30,10 +32,10 @@ def load_model(model):
             device=DEVICE,
             dtype=torch.float16,
         )
-    return model, hook_names
+    return model, hook_names, layer
 
 
-def get_harmful_instructions():
+def get_harmfull_instructions():
     url = 'https://raw.githubusercontent.com/llm-attacks/llm-attacks/main/data/advbench/harmful_behaviors.csv'
     response = requests.get(url)
     dataset = pd.read_csv(io.StringIO(response.content.decode('utf-8')))
@@ -64,15 +66,14 @@ def get_instructions_from_path(name: str):
 
 def get_positive_instructions(steering_vector):
     if steering_vector == "harmfull":
-        return get_harmful_instructions()
+        return get_harmfull_instructions()
     return get_instructions_from_path(steering_vector)
 
 
 def get_negative_instructions(steering_vector):
     if steering_vector == "harmfull":
         return get_harmless_instructions()
-    else:
-        return get_instructions_from_path("EEEE")
+    return get_instructions_from_path("EEEE")
 
 
 def get_direction(steering_vector):
@@ -95,31 +96,30 @@ class ModelBundle:
     for easy passing to functions and methods.
     """
 
-    def __init__(self, results_dir=None,
-                 auto_create_results_dir=True):
+    def __init__(self, results_dir=None, auto_create_results_dir=True):
         self.model_name = None
-        self.model, self.hook_names = None, None
+        self.model = None
+        self.model_layer = None
+        self.hook_names = None
         self.steering_vector = None
-        self.positive_inst_train, self.positive_inst_test = None, None
-        self.negative_inst_train, self.negative_inst_test = None, None
+        self.positive_inst_train = None
+        self.positive_inst_test = None
+        self.negative_inst_train = None
+        self.negative_inst_test = None
         self.direction = None
 
-        # Set up results directorys
-        if results_dir is None and auto_create_results_dir:
-            self.results_dir = self._create_timestamped_results_dir()
-        else:
-            self.results_dir = results_dir
+        if auto_create_results_dir:
+            # Set up results directory name
+            if results_dir is None:
+                self.results_dir = self._create_timestamped_results_dir()
+            else:
+                self.results_dir = results_dir
 
-        # Create the directory if it doesn't exist
-        if self.results_dir and auto_create_results_dir:
-            import os
+            # Create the directory if it doesn't exist
             os.makedirs(self.results_dir, exist_ok=True)
 
     def _create_timestamped_results_dir(self):
         """Create a timestamped results directory."""
-        import os
-        from datetime import datetime
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         results_dir = f"results_{timestamp}"
         return results_dir
@@ -129,11 +129,12 @@ class ModelBundle:
         self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)
         self.negative_inst_train, self.negative_inst_test = get_negative_instructions(steering_vector)
     
-    def load_model(self, model: str):
-        self.model_name = model
+    def load_model(self, model_name: str):
+        # If already had a model, remove it
         if self.model is not None:
             del self.model
         torch.cuda.empty_cache()
-        self.model, self.hook_names = load_model(model)
+
+        self.model_name = model_name
+        self.model, self.hook_names, self.model_layer = get_model_attr(model_name)
         return True
-    
