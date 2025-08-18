@@ -36,7 +36,8 @@ def main():
     else:
         data = defaultdict(dict)
         model_bundle = ModelBundle()
-        remaining_steering_vec = args.num_steering_vectors if args.num_steering_vectors is not None else len(get_steering_vector_names_for_gemma2() + 1)
+        steering_vec_names = get_steering_vector_names_for_gemma2()
+        remaining_steering_vec = args.num_steering_vectors if args.num_steering_vectors is not None else len(steering_vec_names) + 1
         
         # GEMMA and harmfull steering vector
         if GEMMA_1 in args.models:
@@ -48,7 +49,7 @@ def main():
         # GEMMA2 and all steering vectors in dir content/axbench_chosen_dataset/
         if GEMMA_2 in args.models:
             model_bundle.load_model(GEMMA_2)
-            for steering_vector in get_steering_vector_names_for_gemma2():
+            for steering_vector in steering_vec_names:
                 model_bundle.load_steering_vector(steering_vector)
                 data[GEMMA_2][steering_vector] = DataCollector(model_bundle=model_bundle).collect_data()
                 remaining_steering_vec -= 1
