@@ -34,7 +34,7 @@ class ComponentPredictor:
 
     def __init__(self, model_layer, residual_stream_component=None):
         if residual_stream_component is None:
-            residual_stream_component = f"blocks.{model_layer}.hook_resid_pre"
+            residual_stream_component = f"blocks.{model_layer}.hook_resid_pre" if self.model_name is GEMMA_1 else f"blocks.{model_layer}.hook_resid_post"
         self.residual_stream_component = residual_stream_component
 
     def _extract_dot_products(self, dot_prod_dict: List[Dict], component_name: str) -> np.ndarray:
@@ -186,6 +186,7 @@ class ComponentAnalyzer:
         self.model_name = model_name
         self.steering_vector = steering_vector
         self.data = data
+        self.positions = data["meta"]["positions"]
         self.predictor = ComponentPredictor(self._get_model_layer())
         self.multicomponent = multicomponent
         self.results_dir = results_dir
@@ -263,7 +264,7 @@ class ComponentAnalyzer:
         )
 
     def analyze_lasso(self) -> None:
-        for position in range(-1, -MIN_LEN - 1, -1):
+        for position in self.positions:
             print(f"Analyzing position: {position}")
             
             # get dot activations from precomputed data structure
@@ -348,7 +349,7 @@ class ComponentAnalyzer:
         harmful_dict: Dict[int, Dict[str, float]] = {}
 
         # Analyze each position
-        for position in range(-1, -MIN_LEN - 1, -1):
+        for position in self.positions:
             print(f"Analyzing position: {position}")
             harmless_outputs_train, harmful_outputs_train, harmless_outputs_test, harmful_outputs_test = self.data[position]
 

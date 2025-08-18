@@ -35,4 +35,17 @@ def parse_args():
         help="Only run analysis based on saved activations",
         default=True,
     )
+    parser.add_argument(
+        "--pos",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Token positions to analyze, if None, all are analyzed",
+    )
+    parser.add_argument(
+        "--num_steering_vectors",
+        type=int,
+        default=None,
+        help="Number of steering vectors to analyze (if None, all are analyzed)",
+    )
     return parser.parse_args()

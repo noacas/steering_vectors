@@ -15,9 +15,9 @@ class DataCollector:
     Each subset is a tuple: (dot_products_list, norms_list, aggregated_vector_dict).
     """
 
-    def __init__(self, model_bundle: ModelBundle, results_dir: str | None = None):
+    def __init__(self, model_bundle: ModelBundle, positions: List[int] = None):
         self.model_bundle = model_bundle
-        self.results_dir = results_dir or getattr(model_bundle, "results_dir", os.getcwd())
+        self.positions = positions
 
     def _get_data_subsets(self) -> Tuple[List[str], List[str], List[str], List[str]]:
         # Harmless = negative; Harmful = positive
@@ -48,15 +48,17 @@ class DataCollector:
 
     def collect_data(self) -> Dict[int | str, object]:
         data_subsets = self._get_data_subsets()
+        
+        positions = self.positions if self.positions is not None else range(-1, -MIN_LEN - 1, -1)
 
         out: Dict[int | str, object] = {}
         out["meta"] = {
-            "results_dir": self.results_dir,
             "model_layer": self.model_bundle.model_layer,
             "direction": self.model_bundle.direction.detach().cpu(),
+            "positions": positions,
         }
 
-        for position in range(-1, -MIN_LEN - 1, -1):
+        for position in self.positions:
             out[position] = self._compute_dot_activations(
                 position, data_subsets, cache_norms=True, get_aggregated_vector=True
             )
