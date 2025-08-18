@@ -14,10 +14,10 @@ import torch
 
 from scipy.stats import pearsonr
 
-from consts import MIN_LEN, LAYER
-from dot_act import get_dot_act, get_mean_dot_prod, get_act
-from model import ModelBundle
+from consts import MIN_LEN
+from dot_act import get_mean_dot_prod
 from utils import dict_subtraction
+from consts import GEMMA_1, GEMMA_2, GEMMA_1_LAYER, GEMMA_2_LAYER
 
 
 @dataclass
@@ -32,7 +32,7 @@ class ComponentAnalysisResults:
 class ComponentPredictor:
     """Handles component prediction analysis using linear regression."""
 
-    def __init__(self, model_layer, residual_stream_component):
+    def __init__(self, model_layer, residual_stream_component=None):
         if residual_stream_component is None:
             residual_stream_component = f"blocks.{model_layer}.hook_resid_pre"
         self.residual_stream_component = residual_stream_component
@@ -159,9 +159,14 @@ class ComponentPredictor:
 
         print()
         print(f"Top 6 correlating components with target:")
-        corr, _ = pearsonr(X_train, target_train.reshape(-1,1))
-        corr = np.array(corr)
-        corr_with_names = list(zip(train_feature_names, corr))
+        # Compute per-feature correlations with the target
+        corr_with_names = []
+        for idx, name in enumerate(train_feature_names):
+            try:
+                cval, _ = pearsonr(X_train[:, idx], target_train)
+            except Exception:
+                cval = 0.0
+            corr_with_names.append((name, cval))
         corr_with_names.sort(key=lambda x: abs(x[1]), reverse=True)
         for i in range(min(6, len(corr_with_names))):
             name, corr = corr_with_names[i]
@@ -177,9 +182,11 @@ class ComponentPredictor:
 class ComponentAnalyzer:
     """Main class for performing component analysis."""
 
-    def __init__(self, model_bundle: ModelBundle, multicomponent: bool = False):
-        self.model_bundle = model_bundle
-        self.predictor = ComponentPredictor(self.model_bundle.model_layer)
+    def __init__(self, model_name: str, steering_vector: str, data: Dict, multicomponent: bool = True):
+        self.model_name = model_name
+        self.steering_vector = steering_vector
+        self.data = data
+        self.predictor = ComponentPredictor(self._get_model_layer())
         self.multicomponent = multicomponent
 
         # Choose prediction method based on multicomponent flag
@@ -189,34 +196,22 @@ class ComponentAnalyzer:
             self.predictor.compute_single_component_r2
         )
 
-    def _get_subset_data(self) -> Tuple[List, List, List, List]:
-        """Get balanced subsets of training and test data."""
-        subset_len = len(self.model_bundle.positive_inst_train)
+    def _get_model_layer(self) -> int:
+        # Prefer model layer stored in precomputed data
+        if isinstance(self.data, dict) and "meta" in self.data and "model_layer" in self.data["meta"]:
+            return int(self.data["meta"]["model_layer"])
+        if self.model_name == GEMMA_1:
+            return GEMMA_1_LAYER
+        elif self.model_name == GEMMA_2:
+            return GEMMA_2_LAYER
+        else:
+            raise ValueError(f"Model name {self.model_name} not supported")
+    
+    def _get_results_dir(self) -> str:
+        if isinstance(self.data, dict) and "meta" in self.data and "results_dir" in self.data["meta"]:
+            return self.data["meta"]["results_dir"]
+        return os.getcwd()
 
-        return (
-            self.model_bundle.negative_inst_train[:subset_len],
-            self.model_bundle.positive_inst_train[:subset_len],
-            self.model_bundle.negative_inst_test[:subset_len],
-            self.model_bundle.positive_inst_test[:subset_len]
-        )
-
-    def _compute_dot_activations(self, position: int, data_subsets: Tuple, cache_norms=False, get_aggregated_vector=False) -> Tuple[List[Dict], ...]:
-        """Compute dot product activations for all data subsets at given position."""
-        harmless_train, harmful_train, harmless_test, harmful_test = data_subsets
-
-        model = self.model_bundle
-        refusal_direction = self.model_bundle.direction
-
-        return (
-            get_dot_act(model, harmless_train, position, refusal_direction,
-                        cache_norms, get_aggregated_vector),
-            get_dot_act(model, harmful_train, position, refusal_direction,
-                        cache_norms, get_aggregated_vector),
-            get_dot_act(model, harmless_test, position, refusal_direction,
-                        cache_norms, get_aggregated_vector),
-            get_dot_act(model, harmful_test, position, refusal_direction,
-                        cache_norms, get_aggregated_vector)
-        )
 
     def _compute_mean_differences(self, harmful_outputs: List[Dict],
                                   harmless_outputs: List[Dict]) -> Dict[str, float]:
@@ -251,7 +246,7 @@ class ComponentAnalyzer:
     def _save_results(self, train_dict: Dict, test_dict: Dict,
                       harmless_dict: Dict, harmful_dict: Dict) -> ComponentAnalysisResults:
         """Save results to CSV files and return as structured data."""
-        results_dir = self.model_bundle.results_dir
+        results_dir = self._get_results_dir()
 
         # Create DataFrames
         train_df = pd.DataFrame(train_dict)
@@ -260,10 +255,10 @@ class ComponentAnalyzer:
         harmless_r2s_df = pd.DataFrame(harmless_dict)
 
         # Save to CSV
-        train_df.to_csv(os.path.join(results_dir, f'{self.model_bundle.steering_vector}_train_df.csv'))
-        test_df.to_csv(os.path.join(results_dir, f'{self.model_bundle.steering_vector}_test_df.csv'))
-        harmful_r2s_df.to_csv(os.path.join(results_dir, f'{self.model_bundle.steering_vector}_harmful_r2s.csv'))
-        harmless_r2s_df.to_csv(os.path.join(results_dir, f'{self.model_bundle.steering_vector}_harmless_r2s.csv'))
+        train_df.to_csv(os.path.join(results_dir, f'{self.steering_vector}_train_df.csv'))
+        test_df.to_csv(os.path.join(results_dir, f'{self.steering_vector}_test_df.csv'))
+        harmful_r2s_df.to_csv(os.path.join(results_dir, f'{self.steering_vector}_harmful_r2s.csv'))
+        harmless_r2s_df.to_csv(os.path.join(results_dir, f'{self.steering_vector}_harmless_r2s.csv'))
 
         return ComponentAnalysisResults(
             train_df=train_df,
@@ -275,15 +270,9 @@ class ComponentAnalyzer:
     def analyze_lasso(self) -> None:
         for position in range(-1, -MIN_LEN - 1, -1):
             print(f"Analyzing position: {position}")
-
-            # Get data subsets
-            data_subsets = self._get_subset_data()
-
-            # Compute dot activations
-            (harmless_outputs_train, harmful_outputs_train,
-             harmless_outputs_test, harmful_outputs_test) = self._compute_dot_activations(
-                position, data_subsets, cache_norms=True, get_aggregated_vector=True
-            )
+            
+            # get dot activations from precomputed data structure
+            harmless_outputs_train, harmful_outputs_train, harmless_outputs_test, harmful_outputs_test = self.data[position]
 
             harmless_dots_train, harmless_norms_train, harmless_agg_train = harmless_outputs_train
             harmful_dots_train, harmful_norms_train, harmful_agg_train = harmful_outputs_train
@@ -291,7 +280,7 @@ class ComponentAnalyzer:
             harmful_dots_test, harmful_norms_test, harmful_agg_test = harmful_outputs_test
 
             # Cosine similarity with component wise diff-in-means
-            refusal_dir_cpu = self.model_bundle.direction.cpu()
+            refusal_dir_cpu = self.data["meta"]["direction"]
             similarities = {}
 
             for component_name in harmless_agg_train.keys():
@@ -356,24 +345,17 @@ class ComponentAnalyzer:
             print(f"Harmful R²: {r2_harmful:.4f}")
 
     def run_analysis(self) -> ComponentAnalysisResults:
-        """Run the complete component analysis."""
+        """Run the complete component analysis using precomputed data."""
         # Initialize result dictionaries
-        train_dict = {}
-        test_dict = {}
-        harmless_dict = {}
-        harmful_dict = {}
-
-        data_subsets = self._get_subset_data()
+        train_dict: Dict[int, Dict[str, float]] = {}
+        test_dict: Dict[int, Dict[str, float]] = {}
+        harmless_dict: Dict[int, Dict[str, float]] = {}
+        harmful_dict: Dict[int, Dict[str, float]] = {}
 
         # Analyze each position
         for position in range(-1, -MIN_LEN - 1, -1):
             print(f"Analyzing position: {position}")
-
-            # Compute activations
-            (harmless_outputs_train, harmful_outputs_train,
-             harmless_outputs_test, harmful_outputs_test) = self._compute_dot_activations(
-                position, data_subsets
-            )
+            harmless_outputs_train, harmful_outputs_train, harmless_outputs_test, harmful_outputs_test = self.data[position]
 
             # Compute R² scores
             harmless_r2s = self.prediction_method(harmless_outputs_train, harmless_outputs_test)
@@ -402,29 +384,9 @@ class ComponentAnalyzer:
         return self._save_results(train_dict, test_dict, harmless_dict, harmful_dict)
 
 
-def compare_component_prediction_r2(model_bundle: ModelBundle,
-                                    multicomponent: bool = False) -> ComponentAnalysisResults:
-    """
-    Main entry point for component prediction analysis.
-
-    Args:
-        model_bundle: Bundle containing model and data
-        multicomponent: Whether to use multi-component prediction
-
-    Returns:
-        ComponentAnalysisResults containing all analysis results
-    """
-    analyzer = ComponentAnalyzer(model_bundle, multicomponent)
-    return analyzer.run_analysis()
-
-def predict_dot_product_lasso(model_bundle: ModelBundle,
-                              multicomponent: bool = False) -> None:
-    """
-    Run Lasso regression on dot products to predict residual stream.
-
-    Args:
-        model_bundle: Bundle containing model and data
-        multicomponent: Whether to use multi-component prediction
-    """
-    analyzer = ComponentAnalyzer(model_bundle, multicomponent)
-    analyzer.analyze_lasso()
+def analyze(data: Dict, multicomponent: bool = True):
+    for model_name, model_data in data.items():
+        for steering_vector, data in model_data.items():
+            analyzer = ComponentAnalyzer(model_name, steering_vector, data, multicomponent)
+            analyzer.analyze_lasso()
+            analyzer.run_analysis()
