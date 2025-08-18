@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument(
         "-r",
         "--results_dir",
-        default="results",
+        default="results_analysis",
         help="Directory to save results",
     )
     parser.add_argument(
@@ -47,5 +47,11 @@ def parse_args():
         type=int,
         default=None,
         help="Number of steering vectors to analyze (if None, all are analyzed)",
+    )
+    parser.add_argument(
+        "--load_data",
+        type=str,
+        default=None,
+        help="Path to data to load (if None, data is collected is the last one)",
     )
     return parser.parse_args()

@@ -11,6 +11,7 @@ from arg_parser import parse_args
 from collections import defaultdict
 from collect_data import DataCollector
 from utils import create_timestamped_results_dir
+from datetime import datetime
 
 
 def get_steering_vector_names_for_gemma2():
@@ -22,6 +23,14 @@ def get_steering_vector_names_for_gemma2():
         if re.fullmatch(r"\d+_inputs\.pt", f)
     ]
 
+
+def get_last_data_path(data_dir):
+    # choose the last file in the data_dir based on the timestamp
+    files = [f for f in os.listdir(data_dir) if f.endswith(".pkl")]
+    files.sort(key=lambda x: os.path.getmtime(os.path.join(data_dir, x)))
+    return os.path.join(data_dir, files[-1])
+
+
 def main():
     # Load the model bundle
     args = parse_args()
@@ -30,7 +39,8 @@ def main():
     results_dir = create_timestamped_results_dir(args.results_dir)
 
     if not args.get_activations:
-        with open(os.path.join(data_dir, "data.pkl"), "rb") as f:
+        data_path = args.load_data if args.load_data is not None else get_last_data_path(data_dir)
+        with open(data_path, "rb") as f:
             data = pickle.load(f)
         
     else:
@@ -57,7 +67,8 @@ def main():
                     break
 
         # save activations
-        with open(os.path.join(data_dir, "data.pkl"), "wb") as f:
+        data_path = os.path.join(data_dir, f"data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl")
+        with open(data_path, "wb") as f:
             pickle.dump(data, f)
 
     if args.run_analysis:
