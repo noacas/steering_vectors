@@ -34,7 +34,7 @@ class ComponentPredictor:
 
     def __init__(self, model_layer, residual_stream_component = None):
         if residual_stream_component is None:
-            residual_stream_component = f"blocks.{model_layer}.hook_resid_pre"
+            residual_stream_component = f"blocks.{model_layer}.hook_resid_post"
         self.residual_stream_component = residual_stream_component
 
     def _extract_dot_products(self, dot_prod_dict: List[Dict], component_name: str) -> np.ndarray:
@@ -135,7 +135,15 @@ class ComponentPredictor:
 
         alphas, coefs = self._fit_lasso_path(X_train, target_train)
 
-        return alphas, coefs, train_feature_names
+        # Choose max alpha with at least 7 non-zero coefficients
+        chosen_alpha = alphas[np.argmax(np.sum(np.abs(coefs) > 1e-8, axis=0) >= 7)]
+
+        lasso = Lasso(alpha=chosen_alpha, max_iter=10000)
+        lasso.fit(X_train, target_train)
+
+        r2 = lasso.score(X_test, target_test)
+
+        return r2, lasso.coef_, alphas, coefs, train_feature_names
 
     def lr_components_and_norms(self, dot_prod_dict_train: List[Dict],
                                 dot_prod_dict_test: List[Dict],
@@ -341,22 +349,26 @@ class ComponentAnalyzer:
                 reverse=True
             )
 
-            print()
-            print(f"Cosine similarity with component wise diff-in-means")
-            for component_name, similarity in sorted_components:
-                print(f"{component_name}: {similarity:.4f}")
-
 
             print()
             print(f"Running Linear Regression on harmless set")
 
             # Run Lasso regression
-            alphas_harmless, coefs_harmless, train_feature_names = self.predictor.lasso_path_components_and_norms(
+            r2_harmless, chosen_coefs_harmless, alphas_harmless, coefs_harmless, train_feature_names = self.predictor.lasso_path_components_and_norms(
                 harmless_dots_train,
                 harmless_dots_test,
                 harmless_norms_train,
                 harmless_norms_test
             )
+
+            print()
+            names_and_coeffs = list(zip(train_feature_names, chosen_coefs_harmless))
+            names_and_coeffs.sort(key=lambda x: abs(x[1]), reverse=True)
+            print(f"Most important features in the harmless set (showing only non-zero coefficients):")
+            for name, coeff in names_and_coeffs:
+                if coeff != 0:
+                    print(f"{name}: {coeff}")
+            print(f"Harmless R²: {r2_harmless:.4f}")
 
             
             entry_order_indices = np.argmax(np.abs(coefs_harmless) > 1e-8, axis=1)
@@ -378,16 +390,28 @@ class ComponentAnalyzer:
             ordered_feature_names = [train_feature_names[i] for i in final_sorted_indices]
 
             for i, feature_name in enumerate(ordered_feature_names):
+                if i == 10:
+                    print('...')
+                    break
                 print(f"{i+1}. {feature_name}")
 
             print(f"Running Linear Regression on harmful set")
 
-            alphas_harmful, coefs_harmful, train_feature_names = self.predictor.lasso_path_components_and_norms(
+            r2_harmful, chosen_coefs_harmful, alphas_harmful, coefs_harmful, train_feature_names = self.predictor.lasso_path_components_and_norms(
                 harmful_dots_train,
                 harmful_dots_test,
                 harmful_norms_train,
                 harmful_norms_test
             )
+
+            print()
+            names_and_coeffs = list(zip(train_feature_names, chosen_coefs_harmful))
+            names_and_coeffs.sort(key=lambda x: abs(x[1]), reverse=True)
+            print(f"Most important features in the harmful set (showing only non-zero coefficients):")
+            for name, coeff in names_and_coeffs:
+                if coeff != 0:
+                    print(f"{name}: {coeff}")
+            print(f"Harmful R²: {r2_harmful:.4f}")
 
             entry_order_indices = np.argmax(np.abs(coefs_harmful) > 1e-8, axis=1)
 
@@ -408,6 +432,9 @@ class ComponentAnalyzer:
             ordered_feature_names = [train_feature_names[i] for i in final_sorted_indices]
 
             for i, feature_name in enumerate(ordered_feature_names):
+                if i == 10:
+                    print('...')
+                    break
                 print(f"{i+1}. {feature_name}")
 
     def analyze_lasso(self) -> None:
