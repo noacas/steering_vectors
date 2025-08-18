@@ -16,7 +16,7 @@ import torch
 
 from scipy.stats import pearsonr
 
-from consts import MIN_LEN, LAYER
+from consts import MIN_LEN
 from dot_act import get_dot_act, get_mean_dot_prod, get_act
 from model import ModelBundle
 from utils import dict_subtraction
