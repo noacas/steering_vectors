@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import r2_score
 from sklearn.base import RegressorMixin
-from sklearn.linear_model import LinearRegression, Lasso, lasso_path
+from sklearn.linear_model import LinearRegression, Lasso, lars_path
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 import torch
@@ -101,7 +101,7 @@ class ComponentPredictor:
 
     def _fit_lasso_path(self, X_train: np.ndarray, y_train: np.ndarray) -> RegressorMixin:
         """Fit Lasso regression and return the model."""
-        alphas, coefs, _ = lasso_path(X_train, y_train, alphas=None, verbose=False)
+        alphas, active, coefs = lars_path(X_train, y_train)
         return alphas, coefs
 
     def _fit_lasso(self, X_train: np.ndarray, y_train: np.ndarray) -> RegressorMixin:
