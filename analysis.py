@@ -142,6 +142,7 @@ class ComponentPredictor:
         true_indices = np.where(sufficient_non_zero)[0]
 
         print(f"Huh: {num_non_zero[:10]}")
+        print(f"Also huh: {alphas[:10]}")
 
         # Find the largest index
         if true_indices.size > 0:
