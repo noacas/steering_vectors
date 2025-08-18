@@ -156,7 +156,7 @@ class ComponentPredictor:
             if coeff != 0:
                 print(f"{name}: {coeff}")
 
-        lasso = Lasso(alpha=chosen_alpha, max_iter=500)
+        lasso = Lasso(alpha=0.0, max_iter=500)
         lasso.fit(X_train, target_train)
 
         r2 = lasso.score(X_test, target_test)
