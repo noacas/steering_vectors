@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import r2_score
 from sklearn.base import RegressorMixin
-from sklearn.linear_model import LinearRegression, Lasso, lars_path
+from sklearn.linear_model import LinearRegression, Lasso, lars_path, LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 import torch
@@ -156,7 +156,7 @@ class ComponentPredictor:
             if coeff != 0:
                 print(f"{name}: {coeff}")
 
-        lasso = Lasso(alpha=0.0, max_iter=500)
+        lasso = LinearRegression()
         lasso.fit(X_train, target_train)
 
         r2 = lasso.score(X_test, target_test)
