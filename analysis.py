@@ -243,7 +243,7 @@ class ComponentPredictor:
 class ComponentAnalyzer:
     """Main class for performing component analysis."""
 
-    def __init__(self, model_name: str, steering_vector: str, data: Dict, multicomponent: bool = True, results_dir: str = None):
+    def __init__(self, model_name: str, steering_vector: str, data: Dict, multicomponent: bool = False, results_dir: str = None):
         self.model_name = model_name
         self.steering_vector = steering_vector
         self.data = data
@@ -682,7 +682,7 @@ class ComponentAnalyzer:
         return self._save_results(train_dict, test_dict, harmless_dict, harmful_dict)
 
 
-def analyze(data: Dict, multicomponent: bool = True, results_dir: str = None):
+def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
     for model_name, model_data in data.items():
         for steering_vector, data in model_data.items():
             analyzer = ComponentAnalyzer(model_name, steering_vector, data, multicomponent, results_dir)
