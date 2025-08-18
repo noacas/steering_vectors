@@ -18,6 +18,12 @@ def parse_args():
         help="Directory to save data",
     )
     parser.add_argument(
+        "-r",
+        "--results_dir",
+        default="results",
+        help="Directory to save results",
+    )
+    parser.add_argument(
         "--get_activations",
         action="store_true",
         help="Get activations",

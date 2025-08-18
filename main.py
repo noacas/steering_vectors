@@ -27,7 +27,7 @@ def main():
     args = parse_args()
     data_dir = args.data_dir
     os.makedirs(data_dir, exist_ok=True)
-    results_dir = create_timestamped_results_dir(data_dir)
+    results_dir = create_timestamped_results_dir(args.results_dir)
 
     if not args.get_activations:
         with open(os.path.join(data_dir, "data.pkl"), "rb") as f:

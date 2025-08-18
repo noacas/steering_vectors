@@ -7,9 +7,9 @@ def dict_subtraction(d1, d2):
         ret[k] = d1[k] - d2[k]
     return ret
 
-def create_timestamped_results_dir(self):
+def create_timestamped_results_dir(results_dir):
     """Create a timestamped results directory."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    results_dir = f"results_{timestamp}"
-    os.makedirs(self.results_dir, exist_ok=True)
+    results_dir = os.path.join(results_dir, f"results_{timestamp}")
+    os.makedirs(results_dir, exist_ok=True)
     return results_dir
