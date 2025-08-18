@@ -1,11 +1,8 @@
-import gc
 import copy
 from collections import defaultdict
-
 import torch
 from tqdm import tqdm
-
-from consts import LAYER, DEVICE
+from consts import DEVICE
 from model import ModelBundle
 
 
@@ -25,7 +22,7 @@ def get_act(model: ModelBundle, dataset, pos):
           #TODO next meeting shira
           # This is from the tutorial, we don't need to save all the layers in the cache
           # _, gpt2_attn_cache = model.run_with_cache(gpt2_tokens, remove_batch_dim=True, stop_at_layer=attn_layer + 1, names_filter=[attn_hook_name])
-            _, _cache = model.model.run_with_cache(inputs, names_filter = hook_names, stop_at_layer=LAYER + 1)
+            _, _cache = model.model.run_with_cache(inputs, names_filter = hook_names, stop_at_layer=model.model_layer + 1)
             cache = _cache.cpu()[0, pos] # Need to change the indexing when adding batches
 
             output.append(cache)
@@ -52,7 +49,7 @@ def get_dot_act(model: ModelBundle, dataset, pos, refusal_dir, cache_norms=False
         inputs = model.model.to_tokens(text).to(DEVICE)
 
         with torch.no_grad():
-            _, _cache = model.model.run_with_cache(inputs, names_filter = hook_names, stop_at_layer=LAYER + 1)
+            _, _cache = model.model.run_with_cache(inputs, names_filter = hook_names, stop_at_layer=model.model_layer + 1)
             cache = copy.deepcopy(_cache.cache_dict)
             if cache_norms:
                 norm_cache = {}
