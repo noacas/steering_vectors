@@ -136,9 +136,9 @@ class ComponentPredictor:
         alphas, coefs = self._fit_lasso_path(X_train, target_train)
 
         # Choose max alpha with at least 7 non-zero coefficients
-        num_non_zero = np.sum(np.abs(coefs) > 0, axis=0)
+        num_non_zero = (np.sum(np.abs(coefs) > 0, axis=0)) >= 7
         print(f"Number of non-zero coefficients: {np.max(num_non_zero)}")
-        chosen_alpha = alphas[np.argmax(num_non_zero >= 7)]
+        chosen_alpha = alphas[np.argmax(num_non_zero)]
         print(f"Chosen alpha: {chosen_alpha}")
 
         lasso = Lasso(alpha=chosen_alpha, max_iter=500)
