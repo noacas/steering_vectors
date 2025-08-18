@@ -32,7 +32,7 @@ class ComponentAnalysisResults:
 class ComponentPredictor:
     """Handles component prediction analysis using linear regression."""
 
-    def __init__(self, model_layer, residual_stream_component):
+    def __init__(self, model_layer, residual_stream_component = None):
         if residual_stream_component is None:
             residual_stream_component = f"blocks.{model_layer}.hook_resid_pre"
         self.residual_stream_component = residual_stream_component
