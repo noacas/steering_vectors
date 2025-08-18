@@ -12,9 +12,10 @@ def parse_args():
         help="One or more model names to run",
     )
     parser.add_argument(
-        "--results_dir",
-        default="results",
-        help="Directory to save results",
+        "-d",
+        "--data_dir",
+        default="data",
+        help="Directory to save data",
     )
     parser.add_argument(
         "--get_activations",

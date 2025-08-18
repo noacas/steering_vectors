@@ -182,12 +182,13 @@ class ComponentPredictor:
 class ComponentAnalyzer:
     """Main class for performing component analysis."""
 
-    def __init__(self, model_name: str, steering_vector: str, data: Dict, multicomponent: bool = True):
+    def __init__(self, model_name: str, steering_vector: str, data: Dict, multicomponent: bool = True, results_dir: str = None):
         self.model_name = model_name
         self.steering_vector = steering_vector
         self.data = data
         self.predictor = ComponentPredictor(self._get_model_layer())
         self.multicomponent = multicomponent
+        self.results_dir = results_dir
 
         # Choose prediction method based on multicomponent flag
         self.prediction_method = (
@@ -206,12 +207,6 @@ class ComponentAnalyzer:
             return GEMMA_2_LAYER
         else:
             raise ValueError(f"Model name {self.model_name} not supported")
-    
-    def _get_results_dir(self) -> str:
-        if isinstance(self.data, dict) and "meta" in self.data and "results_dir" in self.data["meta"]:
-            return self.data["meta"]["results_dir"]
-        return os.getcwd()
-
 
     def _compute_mean_differences(self, harmful_outputs: List[Dict],
                                   harmless_outputs: List[Dict]) -> Dict[str, float]:
@@ -246,7 +241,7 @@ class ComponentAnalyzer:
     def _save_results(self, train_dict: Dict, test_dict: Dict,
                       harmless_dict: Dict, harmful_dict: Dict) -> ComponentAnalysisResults:
         """Save results to CSV files and return as structured data."""
-        results_dir = self._get_results_dir()
+        results_dir = self.results_dir
 
         # Create DataFrames
         train_df = pd.DataFrame(train_dict)
@@ -384,9 +379,9 @@ class ComponentAnalyzer:
         return self._save_results(train_dict, test_dict, harmless_dict, harmful_dict)
 
 
-def analyze(data: Dict, multicomponent: bool = True):
+def analyze(data: Dict, multicomponent: bool = True, results_dir: str = None):
     for model_name, model_data in data.items():
         for steering_vector, data in model_data.items():
-            analyzer = ComponentAnalyzer(model_name, steering_vector, data, multicomponent)
+            analyzer = ComponentAnalyzer(model_name, steering_vector, data, multicomponent, results_dir)
             analyzer.analyze_lasso()
             analyzer.run_analysis()

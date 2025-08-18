@@ -96,7 +96,7 @@ class ModelBundle:
     for easy passing to functions and methods.
     """
 
-    def __init__(self, results_dir=None, auto_create_results_dir=True):
+    def __init__(self, results_dir=None):
         self.model_name = None
         self.model = None
         self.model_layer = None
@@ -107,23 +107,8 @@ class ModelBundle:
         self.negative_inst_train = None
         self.negative_inst_test = None
         self.direction = None
+        self.results_dir = results_dir
 
-        if auto_create_results_dir:
-            # Set up results directory name
-            if results_dir is None:
-                self.results_dir = self._create_timestamped_results_dir()
-            else:
-                self.results_dir = results_dir
-
-            # Create the directory if it doesn't exist
-            os.makedirs(self.results_dir, exist_ok=True)
-
-    def _create_timestamped_results_dir(self):
-        """Create a timestamped results directory."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        results_dir = f"results_{timestamp}"
-        return results_dir
-    
     def load_steering_vector(self, steering_vector: str):
         self.direction = get_direction(steering_vector)
         self.positive_inst_train, self.positive_inst_test = get_positive_instructions(steering_vector)

@@ -10,6 +10,7 @@ import pickle
 from arg_parser import parse_args
 from collections import defaultdict
 from collect_data import DataCollector
+from utils import create_timestamped_results_dir
 
 
 def get_steering_vector_names_for_gemma2():
@@ -21,14 +22,15 @@ def get_steering_vector_names_for_gemma2():
         if re.fullmatch(r"\d+_inputs\.pt", f)
     ]
 
-
 def main():
     # Load the model bundle
     args = parse_args()
-    results_dir = args.results_dir
+    data_dir = args.data_dir
+    os.makedirs(data_dir, exist_ok=True)
+    results_dir = create_timestamped_results_dir(data_dir)
 
     if not args.get_activations:
-        with open(os.path.join(results_dir, "data.pkl"), "rb") as f:
+        with open(os.path.join(data_dir, "data.pkl"), "rb") as f:
             data = pickle.load(f)
         
     else:
@@ -48,11 +50,11 @@ def main():
                 data[GEMMA_2][steering_vector] = DataCollector(model_bundle=model_bundle, results_dir=results_dir).collect_data()
 
         # save activations
-        with open(os.path.join(results_dir, "data.pkl"), "wb") as f:
+        with open(os.path.join(data_dir, "data.pkl"), "wb") as f:
             pickle.dump(data, f)
 
     if args.run_analysis:
-        analyze(data=data)
+        analyze(data=data, results_dir=results_dir)
 
 
 if __name__ == "__main__":
