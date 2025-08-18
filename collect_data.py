@@ -51,13 +51,13 @@ class DataCollector:
     def collect_data(self) -> Dict[int | str, object]:
         data_subsets = self._get_data_subsets()
         
-        positions = self.positions if self.positions is not None else range(-1, -MIN_LEN - 1, -1)
+        self.positions = self.positions if self.positions is not None else range(-1, -MIN_LEN - 1, -1)
 
         out: Dict[int | str, object] = {}
         out["meta"] = {
             "model_layer": self.model_bundle.model_layer,
             "direction": self.model_bundle.direction.detach().cpu(),
-            "positions": positions,
+            "positions": self.positions,
         }
 
         for position in self.positions:
