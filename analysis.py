@@ -431,16 +431,16 @@ class ComponentAnalyzer:
                     print(f"{name}: {coeff}")
             print(f"Harmful R²: {r2_harmful:.4f}")
 
-            entry_order_indices = np.argmax(np.abs(coefs_harmful) > 1e-8, axis=1)
+            entry_order_indices = np.argmin(np.abs(coefs_harmful) > 0, axis=1)
 
-            active_features_mask = np.any(np.abs(coefs_harmful) > 1e-8, axis=1)
+            active_features_mask = np.any(np.abs(coefs_harmful) > 0, axis=1)
             active_feature_indices = np.where(active_features_mask)[0]
 
             # Map the entry order to the active features
             active_entry_order = entry_order_indices[active_feature_indices]
 
             # Sort the active features by their entry order
-            final_sorted_indices = active_feature_indices[np.argsort(active_entry_order)]
+            final_sorted_indices = active_feature_indices[np.argsort(-active_entry_order)]
 
 
             # --- 4. Print the Ordered List of Features ---
