@@ -141,15 +141,20 @@ class ComponentPredictor:
 
         true_indices = np.where(sufficient_non_zero)[0]
 
-        print(f"Huh: {num_non_zero[:10]}")
-        print(f"Also huh: {alphas[:10]}")
-
         # Find the largest index
         if true_indices.size > 0:
-            largest_index = np.min(true_indices)
-        print(f"Number of non-zero coefficients: {num_non_zero[largest_index]}")
-        chosen_alpha = alphas[largest_index]
-        print(f"Chosen alpha: {chosen_alpha}")
+            first_index = np.min(true_indices)
+        chosen_alpha = alphas[first_index]
+
+        chosen_coefs = coefs[:, first_index]
+
+        print()
+        names_and_coeffs = list(zip(train_feature_names, chosen_coefs))
+        names_and_coeffs.sort(key=lambda x: abs(x[1]), reverse=True)
+        print(f"Most important features chosen by LARS:")
+        for name, coeff in names_and_coeffs:
+            if coeff != 0:
+                print(f"{name}: {coeff}")
 
         lasso = Lasso(alpha=chosen_alpha, max_iter=500)
         lasso.fit(X_train, target_train)
