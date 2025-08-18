@@ -96,7 +96,7 @@ class ModelBundle:
     for easy passing to functions and methods.
     """
 
-    def __init__(self, results_dir=None):
+    def __init__(self):
         self.model_name = None
         self.model = None
         self.model_layer = None
@@ -107,7 +107,6 @@ class ModelBundle:
         self.negative_inst_train = None
         self.negative_inst_test = None
         self.direction = None
-        self.results_dir = results_dir
 
     def load_steering_vector(self, steering_vector: str):
         self.direction = get_direction(steering_vector)

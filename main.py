@@ -35,19 +35,19 @@ def main():
         
     else:
         data = defaultdict(dict)
-        model_bundle = ModelBundle(results_dir=results_dir)
+        model_bundle = ModelBundle()
         # GEMMA and harmfull steering vector
         if GEMMA_1 in args.models:
             model_bundle.load_model(GEMMA_1)
             model_bundle.load_steering_vector("harmfull")
-            data[GEMMA_1]["harmfull"] = DataCollector(model_bundle=model_bundle, results_dir=results_dir).collect_data()
+            data[GEMMA_1]["harmfull"] = DataCollector(model_bundle=model_bundle).collect_data()
 
         # GEMMA2 and all steering vectors in dir content/axbench_chosen_dataset/
         if GEMMA_2 in args.models:
             model_bundle.load_model(GEMMA_2)
             for steering_vector in get_steering_vector_names_for_gemma2():
                 model_bundle.load_steering_vector(steering_vector)
-                data[GEMMA_2][steering_vector] = DataCollector(model_bundle=model_bundle, results_dir=results_dir).collect_data()
+                data[GEMMA_2][steering_vector] = DataCollector(model_bundle=model_bundle).collect_data()
 
         # save activations
         with open(os.path.join(data_dir, "data.pkl"), "wb") as f:
