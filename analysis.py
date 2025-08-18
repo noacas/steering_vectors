@@ -135,11 +135,13 @@ class ComponentPredictor:
 
         alphas, coefs = self._fit_lasso_path(X_train, target_train)
 
-        # Choose max alpha with at least 7 non-zero coefficients
+        # Choose max alpha with at least 4 non-zero coefficients
         num_non_zero = np.sum(np.abs(coefs) > 0, axis=0)
-        sufficient_non_zero = (num_non_zero >= 7)
+        sufficient_non_zero = num_non_zero >= 4
 
         true_indices = np.where(sufficient_non_zero)[0]
+
+        print(f"Huh: {num_non_zero[:10]}")
 
         # Find the largest index
         if true_indices.size > 0:
