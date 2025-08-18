@@ -36,10 +36,8 @@ class ComponentPredictor:
     """Handles component prediction analysis using linear regression."""
 
     def __init__(self, model_layer, model_name, residual_stream_component=None):
-    def __init__(self, model_layer, residual_stream_component = None):
         if residual_stream_component is None:
             residual_stream_component = f"blocks.{model_layer}.hook_resid_pre" if model_name is GEMMA_1 else f"blocks.{model_layer}.hook_resid_post"
-            residual_stream_component = f"blocks.{model_layer}.hook_resid_post"
         self.residual_stream_component = residual_stream_component
 
     def _extract_dot_products(self, dot_prod_dict: List[Dict], component_name: str) -> np.ndarray:
