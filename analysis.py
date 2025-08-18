@@ -398,7 +398,7 @@ class ComponentAnalyzer:
             active_entry_order = entry_order_indices[active_feature_indices]
 
             # Sort the active features by their entry order
-            final_sorted_indices = active_feature_indices[np.argsort(active_entry_order, reverse=True)]
+            final_sorted_indices = active_feature_indices[np.argsort(-active_entry_order)]
 
 
             # --- 4. Print the Ordered List of Features ---
