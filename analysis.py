@@ -34,7 +34,9 @@ class ComponentAnalysisResults:
 class ComponentPredictor:
     """Handles component prediction analysis using linear regression."""
 
-    def __init__(self, residual_stream_component: str = f'blocks.{LAYER}.hook_resid_pre'):
+    def __init__(self, model_layer, residual_stream_component):
+        if residual_stream_component is None:
+            residual_stream_component = f"blocks.{model_layer}.hook_resid_pre"
         self.residual_stream_component = residual_stream_component
 
     def _extract_dot_products(self, dot_prod_dict: List[Dict], component_name: str) -> np.ndarray:
@@ -179,7 +181,7 @@ class ComponentAnalyzer:
 
     def __init__(self, model_bundle: ModelBundle, multicomponent: bool = False):
         self.model_bundle = model_bundle
-        self.predictor = ComponentPredictor()
+        self.predictor = ComponentPredictor(self.model_bundle.model_layer)
         self.multicomponent = multicomponent
 
         # Choose prediction method based on multicomponent flag
