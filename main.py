@@ -1,7 +1,7 @@
 """
 Where do steering vectors come from
 """
-from analysis import predict_dot_product_lasso
+from analysis import predict_dot_product_lasso, predict_dot_product_lasso_path
 from model import ModelBundle
 from consts import GEMMA_1, GEMMA_2
 import os
@@ -28,14 +28,14 @@ def main():
     if GEMMA_1 in args.models:
         model_bundle.load_model(GEMMA_1)
         model_bundle.load_steering_vector("harmfull")
-        predict_dot_product_lasso(model_bundle=model_bundle)
+        predict_dot_product_lasso_path(model_bundle=model_bundle)
 
     # GEMMA2 and all steering vectors in dir content/axbench_chosen_dataset/
     if GEMMA_2 in args.models:
         model_bundle.load_model(GEMMA_2)
         for steering_vector in get_steering_vector_names_for_gemma2():
             model_bundle.load_steering_vector(steering_vector)
-            predict_dot_product_lasso(model_bundle=model_bundle)
+            predict_dot_product_lasso_path(model_bundle=model_bundle)
 
 
 if __name__ == "__main__":

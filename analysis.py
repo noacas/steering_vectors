@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import r2_score
 from sklearn.base import RegressorMixin
-from sklearn.linear_model import LinearRegression, Lasso
+from sklearn.linear_model import LinearRegression, Lasso, lasso_path
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 import torch
@@ -99,11 +99,43 @@ class ComponentPredictor:
 
         return r2_scores
 
+    def _fit_lasso_path(self, X_train: np.ndarray, y_train: np.ndarray) -> RegressorMixin:
+        """Fit Lasso regression and return the model."""
+        alphas, coefs, dual_gaps, n_iters = lasso_path(X_train, y_train, alphas=None, verbose=False)
+        return alphas, coefs
+
     def _fit_lasso(self, X_train: np.ndarray, y_train: np.ndarray) -> RegressorMixin:
         """Fit Lasso regression and return the model."""
         lasso = Lasso(alpha=0.12, max_iter=10000)
         lasso.fit(X_train, y_train)
         return lasso
+
+    def lasso_path_components_and_norms(self, dot_prod_dict_train: List[Dict],
+                                dot_prod_dict_test: List[Dict],
+                                norms_train: List[Dict], norms_test: List[Dict]) -> RegressorMixin:
+        """Run Lasso on all components and norms."""
+        component_names = list(dot_prod_dict_train[0].keys())
+        train_feature_names = [c for c in component_names if c != self.residual_stream_component]
+
+        X_train_dots = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_train, c).reshape(-1, 1)
+            for c in train_feature_names
+        ], axis=1)
+
+        X_test_dots = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_test, c).reshape(-1, 1)
+            for c in train_feature_names
+        ], axis=1)
+
+        X_train = X_train_dots
+        X_test = X_test_dots
+
+        target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
+        target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
+
+        alphas, coefs = self._fit_lasso_path(X_train, target_train)
+
+        return alphas, coefs, train_feature_names
 
     def lr_components_and_norms(self, dot_prod_dict_train: List[Dict],
                                 dot_prod_dict_test: List[Dict],
@@ -271,6 +303,112 @@ class ComponentAnalyzer:
             harmful_r2s_df=harmful_r2s_df,
             harmless_r2s_df=harmless_r2s_df
         )
+    
+    def analyze_lasso_path(self) -> None:
+        for position in range(-1, -MIN_LEN - 1, -1):
+            print(f"Analyzing position: {position}")
+
+            # Get data subsets
+            data_subsets = self._get_subset_data()
+
+            # Compute dot activations
+            (harmless_outputs_train, harmful_outputs_train,
+             harmless_outputs_test, harmful_outputs_test) = self._compute_dot_activations(
+                position, data_subsets, cache_norms=True, get_aggregated_vector=True
+            )
+
+            harmless_dots_train, harmless_norms_train, harmless_agg_train = harmless_outputs_train
+            harmful_dots_train, harmful_norms_train, harmful_agg_train = harmful_outputs_train
+            harmless_dots_test, harmless_norms_test, harmless_agg_test = harmless_outputs_test
+            harmful_dots_test, harmful_norms_test, harmful_agg_test = harmful_outputs_test
+
+            # Cosine similarity with component wise diff-in-means
+            refusal_dir_cpu = self.model_bundle.direction.cpu()
+            similarities = {}
+
+            for component_name in harmless_agg_train.keys():
+                agg_train_harmless = harmless_agg_train[component_name]
+                agg_train_harmful = harmful_agg_train[component_name]
+
+                component_diff_in_means = agg_train_harmful - agg_train_harmless
+                similarities[component_name] = torch.nn.functional.cosine_similarity(
+                    refusal_dir_cpu, component_diff_in_means, dim=0
+                ).item()
+
+            sorted_components = sorted(
+                similarities.items(),
+                key=lambda x: abs(x[1]),
+                reverse=True
+            )
+
+            print()
+            print(f"Cosine similarity with component wise diff-in-means")
+            for component_name, similarity in sorted_components:
+                print(f"{component_name}: {similarity:.4f}")
+
+
+            print()
+            print(f"Running Linear Regression on harmless set")
+
+            # Run Lasso regression
+            alphas_harmless, coefs_harmless, train_feature_names = self.predictor.lasso_path_components_and_norms(
+                harmless_dots_train,
+                harmless_dots_test,
+                harmless_norms_train,
+                harmless_norms_test
+            )
+
+            
+            entry_order_indices = np.argmax(np.abs(coefs_harmless) > 1e-8, axis=1)
+
+            active_features_mask = np.any(np.abs(coefs_harmless) > 1e-8, axis=1)
+            active_feature_indices = np.where(active_features_mask)[0]
+
+            # Map the entry order to the active features
+            active_entry_order = entry_order_indices[active_feature_indices]
+
+            # Sort the active features by their entry order
+            final_sorted_indices = active_feature_indices[np.argsort(active_entry_order)]
+
+
+            # --- 4. Print the Ordered List of Features ---
+            print("\n--- Features in Order of Appearance in LASSO Path ---")
+            print("(From most important to least important)\n")
+
+            ordered_feature_names = [train_feature_names[i] for i in final_sorted_indices]
+
+            for i, feature_name in enumerate(ordered_feature_names):
+                print(f"{i+1}. {feature_name}")
+
+            print(f"Running Linear Regression on harmful set")
+
+            alphas_harmful, coefs_harmful, train_feature_names = self.predictor.lasso_path_components_and_norms(
+                harmful_dots_train,
+                harmful_dots_test,
+                harmful_norms_train,
+                harmful_norms_test
+            )
+
+            entry_order_indices = np.argmax(np.abs(coefs_harmful) > 1e-8, axis=1)
+
+            active_features_mask = np.any(np.abs(coefs_harmful) > 1e-8, axis=1)
+            active_feature_indices = np.where(active_features_mask)[0]
+
+            # Map the entry order to the active features
+            active_entry_order = entry_order_indices[active_feature_indices]
+
+            # Sort the active features by their entry order
+            final_sorted_indices = active_feature_indices[np.argsort(active_entry_order)]
+
+
+            # --- 4. Print the Ordered List of Features ---
+            print("\n--- Features in Order of Appearance in LASSO Path ---")
+            print("(From most important to least important)\n")
+
+            ordered_feature_names = [train_feature_names[i] for i in final_sorted_indices]
+
+            for i, feature_name in enumerate(ordered_feature_names):
+                print(f"{i+1}. {feature_name}")
 
     def analyze_lasso(self) -> None:
         for position in range(-1, -MIN_LEN - 1, -1):
@@ -428,3 +566,15 @@ def predict_dot_product_lasso(model_bundle: ModelBundle,
     """
     analyzer = ComponentAnalyzer(model_bundle, multicomponent)
     analyzer.analyze_lasso()
+
+def predict_dot_product_lasso_path(model_bundle: ModelBundle,
+                                   multicomponent: bool = False) -> None:
+    """
+    Run Lasso path regression on dot products to predict residual stream.
+
+    Args:
+        model_bundle: Bundle containing model and data
+        multicomponent: Whether to use multi-component prediction
+    """
+    analyzer = ComponentAnalyzer(model_bundle, multicomponent)
+    analyzer.analyze_lasso_path()
