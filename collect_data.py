@@ -20,12 +20,14 @@ class DataCollector:
         self.positions = positions
 
     def _get_data_subsets(self) -> Tuple[List[str], List[str], List[str], List[str]]:
+        subset_len = len(self.model_bundle.positive_inst_train)
+        
         # Harmless = negative; Harmful = positive
         return (
-            self.model_bundle.negative_inst_train,
-            self.model_bundle.positive_inst_train,
-            self.model_bundle.negative_inst_test,
-            self.model_bundle.positive_inst_test,
+            self.model_bundle.negative_inst_train[:subset_len],
+            self.model_bundle.positive_inst_train[:subset_len],
+            self.model_bundle.negative_inst_test[:subset_len],
+            self.model_bundle.positive_inst_test[:subset_len],
         )
 
     def _compute_dot_activations(
