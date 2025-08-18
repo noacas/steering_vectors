@@ -101,7 +101,7 @@ class ComponentPredictor:
 
     def _fit_lasso_path(self, X_train: np.ndarray, y_train: np.ndarray) -> RegressorMixin:
         """Fit Lasso regression and return the model."""
-        alphas, coefs, dual_gaps, n_iters = lasso_path(X_train, y_train, alphas=None, verbose=False)
+        alphas, coefs, _ = lasso_path(X_train, y_train, alphas=None, verbose=False)
         return alphas, coefs
 
     def _fit_lasso(self, X_train: np.ndarray, y_train: np.ndarray) -> RegressorMixin:
