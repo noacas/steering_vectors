@@ -353,16 +353,22 @@ class ComponentAnalyzer:
             print(f"Analyzing position: {position}")
             harmless_outputs_train, harmful_outputs_train, harmless_outputs_test, harmful_outputs_test = self.data[position]
 
+            harmless_dots_train = harmless_outputs_train[0]
+            harmful_dots_train = harmful_outputs_train[0]
+            harmless_dots_test = harmless_outputs_test[0]
+            harmful_dots_test = harmful_outputs_test[0]
+
+            
             # Compute R² scores
-            harmless_r2s = self.prediction_method(harmless_outputs_train, harmless_outputs_test)
-            harmful_r2s = self.prediction_method(harmful_outputs_train, harmful_outputs_test)
+            harmless_r2s = self.prediction_method(harmless_dots_train, harmless_dots_test)
+            harmful_r2s = self.prediction_method(harmful_dots_train, harmful_dots_test)
 
             # Compute mean differences
             diff_means_train = self._compute_mean_differences(
-                harmful_outputs_train, harmless_outputs_train
+                harmful_dots_train, harmless_dots_train
             )
             diff_means_test = self._compute_mean_differences(
-                harmful_outputs_test, harmless_outputs_test
+                harmful_dots_test, harmless_dots_test
             )
 
             # Store results
