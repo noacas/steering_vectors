@@ -75,7 +75,7 @@ def main():
         analyze(data=data, results_dir=results_dir)
 
     if args.run_visualize:
-        csv_file_path = "/home/joberant/NLP_2425b/troyansky1/steering_vectors/results_analysis/results_20250818_204000/summary_all.csv"
+        csv_file_path = "/home/joberant/NLP_2425b/troyansky1/steering_vectors/results_analysis/results_20250820_133042/summary_all.csv"
         viz = Visualize(csv_file_path)
         viz.generate_all_plots()
         
