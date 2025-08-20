@@ -279,6 +279,8 @@ class ComponentAnalyzer:
         os.makedirs(position_dir, exist_ok=True)
         return position_dir
 
+    def 
+
     def _save_top_features(self, position: int, set_name: str, features_and_coefs: List[Tuple[str, float]], method: str) -> None:
         position_dir = self._get_position_dir(position)
         df = pd.DataFrame(features_and_coefs[: self.top_k], columns=["feature", "coef"])
@@ -399,6 +401,21 @@ class ComponentAnalyzer:
             positive_r2s_df=positive_r2s_df,
             negative_r2s_df=negative_r2s_df
         )
+
+    def analyze_component_similarities(self) -> None:
+        for position in self.positions:
+
+            negative_outputs_train, positive_outputs_train, negative_outputs_test, positive_outputs_test = self.data[position]
+            negative_dots_train, negative_norms_train, negative_agg_train = negative_outputs_train
+            positive_dots_train, positive_norms_train, positive_agg_train = positive_outputs_train
+            negative_dots_test, negative_norms_test, negative_agg_test = negative_outputs_test
+            positive_dots_test, positive_norms_test, positive_agg_test = positive_outputs_test
+
+            refusal_dir_cpu = self.data["meta"]["direction"]
+            similarities = self._compute_component_similarities(negative_agg_train, positive_agg_train, refusal_dir_cpu)
+            similarities.sort(key=lambda x: abs(x[1]), reverse=True)
+            self._append_summary_row("Component Similarities", position, "All", 0.0, None, similarities)
+            self._log(f"pos {position} | Component Similarities | top: {', '.join([n for n,_ in similarities[:5]])}")
     
     def analyze_lasso_path(self) -> None:
         for position in self.positions:
