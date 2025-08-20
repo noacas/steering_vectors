@@ -149,85 +149,145 @@ class Visualize:
             
             self.save_plot(model, 'method_position_interaction')
             
-    def top_features_analysis(self):
-        """Analyze and visualize top features"""
+    def component_importance_analysis(self):
+        """Analyze which components contribute most to steering vectors"""
         for model in ['gemma', 'gemma2']:
             data = self.get_model_data(model)
             
-            # Extract all features from top_features column
-            all_features = []
+            # Extract features with their weights
+            component_weights = {}
             for features_str in data['top_features'].dropna():
-                # Parse feature strings like "blocks.8.hook_mlp_out:1.0842"
                 features = features_str.split(';')
                 for feature in features:
                     if ':' in feature:
-                        feature_name = feature.split(':')[0].strip()
-                        all_features.append(feature_name)
+                        feature_name, weight_str = feature.split(':')
+                        feature_name = feature_name.strip()
+                        try:
+                            weight = abs(float(weight_str.strip()))  # Use absolute value
+                            if feature_name in component_weights:
+                                component_weights[feature_name].append(weight)
+                            else:
+                                component_weights[feature_name] = [weight]
+                        except ValueError:
+                            continue
             
-            # Count feature frequencies
-            feature_counts = Counter(all_features)
+            # Calculate average absolute weights for each component
+            avg_weights = {comp: np.mean(weights) for comp, weights in component_weights.items()}
             
-            # Create bar plot of top 20 features
-            top_features = dict(feature_counts.most_common(20))
+            # Sort by importance and take top 20
+            top_components = dict(sorted(avg_weights.items(), key=lambda x: x[1], reverse=True)[:20])
             
-            plt.figure(figsize=(12, 8))
-            plt.barh(range(len(top_features)), list(top_features.values()))
-            plt.yticks(range(len(top_features)), list(top_features.keys()))
-            plt.xlabel('Frequency')
-            plt.title(f'Top 20 Most Important Features - {model.upper()}')
+            plt.figure(figsize=(14, 8))
+            plt.barh(range(len(top_components)), list(top_components.values()))
+            plt.yticks(range(len(top_components)), list(top_components.keys()))
+            plt.xlabel('Average Absolute Weight')
+            plt.title(f'Top 20 Components by Steering Contribution - {model.upper()}')
             plt.gca().invert_yaxis()
             
-            self.save_plot(model, 'top_features_frequency')
+            self.save_plot(model, 'component_importance')
             
-    def feature_pattern_analysis(self):
-        """Analyze patterns in feature types"""
+    def layer_importance_heatmap(self):
+        """Create heatmap showing importance of each layer across different steering vectors"""
         for model in ['gemma', 'gemma2']:
             data = self.get_model_data(model)
             
-            # Categorize features by type
-            feature_types = {'hook_mlp_out': 0, 'hook_attn_out': 0, 'hook_resid_pre': 0, 'other': 0}
+            # Extract layer numbers and their weights for each steering vector
+            layer_weights = {}
             
-            for features_str in data['top_features'].dropna():
-                features = features_str.split(';')
+            for _, row in data.iterrows():
+                steering_vec = row['steering_vector']
+                if pd.isna(row['top_features']):
+                    continue
+                    
+                features = row['top_features'].split(';')
+                layer_importance = {}
+                
                 for feature in features:
                     if ':' in feature:
-                        feature_name = feature.split(':')[0].strip()
-                        if 'hook_mlp_out' in feature_name:
-                            feature_types['hook_mlp_out'] += 1
-                        elif 'hook_attn_out' in feature_name:
-                            feature_types['hook_attn_out'] += 1
-                        elif 'hook_resid_pre' in feature_name:
-                            feature_types['hook_resid_pre'] += 1
-                        else:
-                            feature_types['other'] += 1
+                        feature_name, weight_str = feature.split(':')
+                        feature_name = feature_name.strip()
+                        try:
+                            weight = abs(float(weight_str.strip()))
+                            # Extract layer number
+                            if 'blocks.' in feature_name:
+                                layer_num = int(feature_name.split('.')[1])
+                                if layer_num in layer_importance:
+                                    layer_importance[layer_num] += weight
+                                else:
+                                    layer_importance[layer_num] = weight
+                        except (ValueError, IndexError):
+                            continue
+                
+                if steering_vec not in layer_weights:
+                    layer_weights[steering_vec] = {}
+                layer_weights[steering_vec] = layer_importance
             
-            plt.figure(figsize=(8, 6))
-            plt.pie(feature_types.values(), labels=feature_types.keys(), autopct='%1.1f%%')
-            plt.title(f'Distribution of Feature Types - {model.upper()}')
+            # Convert to DataFrame for heatmap
+            layer_df = pd.DataFrame(layer_weights).fillna(0)
             
-            self.save_plot(model, 'feature_pattern_analysis')
+            if not layer_df.empty:
+                plt.figure(figsize=(12, 8))
+                sns.heatmap(layer_df, cmap='viridis', annot=False, cbar_kws={'label': 'Cumulative Weight'})
+                plt.title(f'Layer Importance Across Steering Vectors - {model.upper()}')
+                plt.xlabel('Steering Vector')
+                plt.ylabel('Layer Number')
+                
+                self.save_plot(model, 'layer_importance_heatmap')
             
-    def correlation_matrix(self):
-        """Create correlation matrix for numerical variables"""
+    def steering_vector_component_analysis(self):
+        """Analyze which components are most important for specific steering vectors"""
         for model in ['gemma', 'gemma2']:
             data = self.get_model_data(model)
             
-            # Select numerical columns and encode categorical ones
-            numerical_data = data[['position', 'r2', 'intercept']].copy()
+            # Focus on steering vectors with good R² scores
+            good_performance = data[data['r2'] > 0.5]
             
-            # Add encoded categorical variables
-            numerical_data['method_encoded'] = pd.Categorical(data['method']).codes
-            numerical_data['set_encoded'] = pd.Categorical(data['set']).codes
-            numerical_data['steering_vector_encoded'] = pd.Categorical(data['steering_vector']).codes
+            if len(good_performance) == 0:
+                continue
+                
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle(f'Component Analysis for Best Performing Steering Vectors - {model.upper()}')
             
-            # Calculate correlation matrix
-            corr_matrix = numerical_data.corr()
+            # Get top 4 steering vectors by R²
+            top_vectors = good_performance.nlargest(4, 'r2')['steering_vector'].unique()[:4]
             
-            plt.figure(figsize=(10, 8))
-            sns.heatmap(corr_matrix, annot=True, fmt='.3f', cmap='coolwarm', center=0)
-            plt.title(f'Correlation Matrix - {model.upper()}')
+            for idx, steering_vec in enumerate(top_vectors):
+                row, col = idx // 2, idx % 2
+                
+                vector_data = data[data['steering_vector'] == steering_vec]
+                component_weights = {}
+                
+                for features_str in vector_data['top_features'].dropna():
+                    features = features_str.split(';')
+                    for feature in features:
+                        if ':' in feature:
+                            feature_name, weight_str = feature.split(':')
+                            feature_name = feature_name.strip()
+                            try:
+                                weight = abs(float(weight_str.strip()))
+                                if feature_name in component_weights:
+                                    component_weights[feature_name].append(weight)
+                                else:
+                                    component_weights[feature_name] = [weight]
+                            except ValueError:
+                                continue
+                
+                # Get top 10 components for this steering vector
+                avg_weights = {comp: np.mean(weights) for comp, weights in component_weights.items()}
+                top_10 = dict(sorted(avg_weights.items(), key=lambda x: x[1], reverse=True)[:10])
+                
+                if top_10:
+                    axes[row, col].barh(range(len(top_10)), list(top_10.values()))
+                    axes[row, col].set_yticks(range(len(top_10)))
+                    axes[row, col].set_yticklabels(list(top_10.keys()), fontsize=8)
+                    axes[row, col].set_title(f'Steering Vector: {steering_vec}')
+                    axes[row, col].set_xlabel('Avg Weight')
+                    axes[row, col].invert_yaxis()
             
-            self.save_plot(model, 'correlation_matrix')
+            plt.tight_layout()
+            plt.savefig(f'plots/{"gemma1" if model == "gemma" else "gemma2"}/steering_vector_components.png', 
+                       dpi=300, bbox_inches='tight')
+            plt.close()
             
     def faceted_analysis(self):
         """Create comprehensive faceted analysis"""
@@ -293,17 +353,14 @@ class Visualize:
         print("6. Method-position interaction...")
         self.method_position_interaction()
         
-        print("7. Top features analysis...")
-        self.top_features_analysis()
+        print("7. Component importance analysis...")
+        self.component_importance_analysis()
         
-        print("8. Feature pattern analysis...")
-        self.feature_pattern_analysis()
+        print("8. Layer importance heatmap...")
+        self.layer_importance_heatmap()
         
-        print("9. Correlation matrix...")
-        self.correlation_matrix()
-        
-        print("10. Faceted analysis...")
-        self.faceted_analysis()
+        print("9. Steering vector component analysis...")
+        self.steering_vector_component_analysis()
         
         print("All visualizations completed!")
         print("Plots saved in:")
