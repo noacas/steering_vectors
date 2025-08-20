@@ -190,51 +190,6 @@ class ComponentPredictor:
         # Note: The chosen coefs are not not the same as the ones used to compute r2    
         return r2, chosen_coefs, alphas, coefs, used_feature_names
 
-    def lr_components_and_norms(self, dot_prod_dict_train: List[Dict],
-                                dot_prod_dict_test: List[Dict],
-                                norms_train: List[Dict], norms_test: List[Dict]) -> Tuple[float, np.ndarray, float, List[str]]:
-        """Run Lasso over component features (norms currently unused).
-
-        Returns (r2, coef, intercept, feature_names).
-        """
-        component_names = list(dot_prod_dict_train[0].keys())
-        train_feature_names = [c for c in component_names if c != self.residual_stream_component]
-
-        X_train_dots = np.concatenate([
-            self._extract_dot_products(dot_prod_dict_train, c).reshape(-1, 1)
-            for c in train_feature_names
-        ], axis=1)
-
-        X_test_dots = np.concatenate([
-            self._extract_dot_products(dot_prod_dict_test, c).reshape(-1, 1)
-            for c in train_feature_names
-        ], axis=1)
-
-        # We currently use only dot-product features
-        X_train = X_train_dots
-        X_test = X_test_dots
-
-        target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
-        target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
-
-        # Sanitize inputs for Lasso (finite values, drop zero-variance columns)
-        X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
-        X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
-        target_train = np.nan_to_num(target_train, nan=0.0, posinf=0.0, neginf=0.0)
-        target_test = np.nan_to_num(target_test, nan=0.0, posinf=0.0, neginf=0.0)
-
-        col_std = X_train.std(axis=0)
-        keep_mask = col_std > 1e-12
-        X_train = X_train[:, keep_mask]
-        X_test = X_test[:, keep_mask]
-        used_feature_names = [name for name, keep in zip(train_feature_names, keep_mask) if keep]
-
-        # Fit Lasso
-        lasso = self._fit_lasso(X_train, target_train)
-        r2 = lasso.score(X_test, target_test)
-
-        return r2, lasso.coef_, float(lasso.intercept_), used_feature_names
-
 
 class ComponentAnalyzer:
     """Main class for performing component analysis."""
@@ -347,29 +302,6 @@ class ComponentAnalyzer:
         sorted_components = sorted(similarities.items(), key=lambda x: abs(x[1]), reverse=True)
         return sorted_components
 
-    def _print_analysis_results(self, position: int, diff_means_train: Dict[str, float],
-                                diff_means_test: Dict[str, float], negative_r2s: Dict[str, float],
-                                positive_r2s: Dict[str, float]) -> None:
-        """Print analysis results for debugging/monitoring."""
-        print(f"Position: {position}")
-
-        # Sort by absolute difference in training means
-        sorted_components = sorted(
-            diff_means_train.items(),
-            key=lambda x: abs(x[1]),
-            reverse=True
-        )
-
-        for component_name, diff_train in sorted_components:
-            diff_test = diff_means_test[component_name]
-            negative_r2 = negative_r2s.get(component_name, 0.0)
-            positive_r2 = positive_r2s.get(component_name, 0.0)
-
-            print(f"{component_name}:")
-            print(f"  Diff in means - Train: {diff_train:.4f}, Test: {diff_test:.4f}")
-            print(f"  R² - negative: {negative_r2:.4f}, positive: {positive_r2:.4f}")
-            print()
-
     def _save_results(self, train_dict: Dict, test_dict: Dict,
                       negative_dict: Dict, positive_dict: Dict) -> ComponentAnalysisResults:
         """Save results to CSV files and return as structured data.
@@ -400,6 +332,35 @@ class ComponentAnalyzer:
             negative_r2s_df=negative_r2s_df
         )
     
+    def _analyze_lasso_path_for_set(self, dots_train: np.ndarray, dots_test: np.ndarray, norms_train: np.ndarray, norms_test: np.ndarray, set_name: str, position: int) -> None:
+        r2, chosen_coefs, alphas, coefs, train_feature_names = self.predictor.lasso_path_components_and_norms(
+            dots_train,
+            dots_test,
+            norms_train,
+            norms_test
+        )
+        
+        entry_order_indices = np.argmin(np.abs(coefs) > 0, axis=1)
+
+        active_features_mask = np.any(np.abs(coefs) > 0, axis=1)
+        active_feature_indices = np.where(active_features_mask)[0]
+
+        # Map the entry order to the active features
+        active_entry_order = entry_order_indices[active_feature_indices]
+
+        # Sort the active features by their entry order
+        final_sorted_indices = active_feature_indices[np.argsort(-active_entry_order)]
+
+        ordered_feature_names = [train_feature_names[i] for i in final_sorted_indices]
+        names_and_coeffs = list(zip(ordered_feature_names, chosen_coefs))
+
+        # Save concise results
+        if self.save_details:
+            self._save_top_features(position, set_name, names_and_coeffs, method="lars")
+        self._append_summary_row("lars", position, set_name, r2, None, names_and_coeffs)
+        self._log(f"pos {position} | LARS negative R²={r2:.3f} | top: {', '.join([n for n,_ in names_and_coeffs[:5]])}")
+
+
     def analyze_lasso_path(self) -> None:
         for position in self.positions:
 
@@ -409,149 +370,27 @@ class ComponentAnalyzer:
             negative_dots_test, negative_norms_test, negative_agg_test = negative_outputs_test
             positive_dots_test, positive_norms_test, positive_agg_test = positive_outputs_test
 
-            refusal_dir_cpu = self.data["meta"]["direction"]
-            _ = self._compute_component_similarities(negative_agg_train, positive_agg_train, refusal_dir_cpu)
-
-            # Run Lasso regression
-            r2_negative, chosen_coefs_negative, alphas_negative, coefs_negative, train_feature_names = self.predictor.lasso_path_components_and_norms(
+            self._analyze_lasso_path_for_set(
                 negative_dots_train,
                 negative_dots_test,
                 negative_norms_train,
-                negative_norms_test
+                negative_norms_test,
+                "negative",
+                position
             )
-            names_and_coeffs = list(zip(train_feature_names, chosen_coefs_negative))
-            names_and_coeffs.sort(key=lambda x: abs(x[1]), reverse=True)
-
-            
-            entry_order_indices = np.argmin(np.abs(coefs_negative) > 0, axis=1)
-
-            active_features_mask = np.any(np.abs(coefs_negative) > 0, axis=1)
-            active_feature_indices = np.where(active_features_mask)[0]
-
-            # Map the entry order to the active features
-            active_entry_order = entry_order_indices[active_feature_indices]
-
-            # Sort the active features by their entry order
-            final_sorted_indices = active_feature_indices[np.argsort(-active_entry_order)]
-
-            ordered_feature_names = [train_feature_names[i] for i in final_sorted_indices]
-
-            # Save concise results
-            if self.save_details:
-                self._save_top_features(position, "negative", names_and_coeffs, method="lars")
-            self._append_summary_row("lars", position, "negative", r2_negative, None, names_and_coeffs)
-            self._log(f"pos {position} | LARS negative R²={r2_negative:.3f} | top: {', '.join([n for n,_ in names_and_coeffs[:5]])}")
-
-            r2_positive, chosen_coefs_positive, alphas_positive, coefs_positive, train_feature_names = self.predictor.lasso_path_components_and_norms(
+            self._analyze_lasso_path_for_set(
                 positive_dots_train,
                 positive_dots_test,
                 positive_norms_train,
-                positive_norms_test
+                positive_norms_test,
+                "positive",
+                position
             )
-            names_and_coeffs = list(zip(train_feature_names, chosen_coefs_positive))
-            names_and_coeffs.sort(key=lambda x: abs(x[1]), reverse=True)
 
-            entry_order_indices = np.argmin(np.abs(coefs_positive) > 0, axis=1)
-
-            active_features_mask = np.any(np.abs(coefs_positive) > 0, axis=1)
-            active_feature_indices = np.where(active_features_mask)[0]
-
-            # Map the entry order to the active features
-            active_entry_order = entry_order_indices[active_feature_indices]
-
-            # Sort the active features by their entry order
-            final_sorted_indices = active_feature_indices[np.argsort(-active_entry_order)]
-
-            ordered_feature_names = [train_feature_names[i] for i in final_sorted_indices]
-
-            if self.save_details:
-                self._save_top_features(position, "positive", names_and_coeffs, method="lars")
-            self._append_summary_row("lars", position, "positive", r2_positive, None, names_and_coeffs)
-            self._log(f"pos {position} | LARS positive R²={r2_positive:.3f} | top: {', '.join([n for n,_ in names_and_coeffs[:5]])}")
         # Flush aggregate summaries after iterating all positions
         if self.save_details:
             self._flush_summaries()
                 
-    def analyze_lasso(self) -> None:
-        for position in self.positions:
-            # get dot activations from precomputed data structure
-            negative_outputs_train, positive_outputs_train, negative_outputs_test, positive_outputs_test = self.data[position]
-
-            negative_dots_train, negative_norms_train, negative_agg_train = negative_outputs_train
-            positive_dots_train, positive_norms_train, positive_agg_train = positive_outputs_train
-            negative_dots_test, negative_norms_test, negative_agg_test = negative_outputs_test
-            positive_dots_test, positive_norms_test, positive_agg_test = positive_outputs_test
-
-            # Lasso (negative)
-            r2_negative, coef_negative, intercept_negative, train_feature_names = self.predictor.lr_components_and_norms(
-                negative_dots_train,
-                negative_dots_test,
-                negative_norms_train,
-                negative_norms_test
-            )
-
-            names_and_coefs_neg = list(zip(train_feature_names, coef_negative))
-            names_and_coefs_neg.sort(key=lambda x: abs(x[1]), reverse=True)
-            if self.save_details:
-                self._save_top_features(position, "negative", names_and_coefs_neg, method="lasso")
-                self._append_summary_row("lasso", position, "negative", r2_negative, float(intercept_negative), names_and_coefs_neg)
-            self._log(f"pos {position} | LASSO negative R²={r2_negative:.3f}, b={intercept_negative:.3f} | top: {', '.join([n for n,_ in names_and_coefs_neg[:5]])}")
-
-            # Lasso (positive)
-            r2_positive, coef_positive, intercept_positive, _ = self.predictor.lr_components_and_norms(
-                positive_dots_train,
-                positive_dots_test,
-                positive_norms_train,
-                positive_norms_test
-            )
-
-            names_and_coefs_pos = list(zip(train_feature_names, coef_positive))
-            names_and_coefs_pos.sort(key=lambda x: abs(x[1]), reverse=True)
-            if self.save_details:
-                self._save_top_features(position, "positive", names_and_coefs_pos, method="lasso")
-                self._append_summary_row("lasso", position, "positive", r2_positive, float(intercept_positive), names_and_coefs_pos)
-            self._log(f"pos {position} | LASSO positive R²={r2_positive:.3f}, b={intercept_positive:.3f} | top: {', '.join([n for n,_ in names_and_coefs_pos[:5]])}")
-        # Flush aggregate summaries after iterating all positions
-        if self.save_details:
-            self._flush_summaries()
-
-    def analyze_lasso(self) -> None:
-        for position in self.positions:
-            # get dot activations from precomputed data structure
-            negative_outputs_train, positive_outputs_train, negative_outputs_test, positive_outputs_test = self.data[position]
-
-            negative_dots_train, negative_norms_train, negative_agg_train = negative_outputs_train
-            positive_dots_train, positive_norms_train, positive_agg_train = positive_outputs_train
-            negative_dots_test, negative_norms_test, negative_agg_test = negative_outputs_test
-            positive_dots_test, positive_norms_test, positive_agg_test = positive_outputs_test
-
-            # Run concise Lasso summaries
-            r2_negative, coef_negative, intercept_negative, train_feature_names = self.predictor.lr_components_and_norms(
-                negative_dots_train,
-                negative_dots_test,
-                negative_norms_train,
-                negative_norms_test
-            )
-
-            names_and_coefs_neg = list(zip(train_feature_names, coef_negative))
-            names_and_coefs_neg.sort(key=lambda x: abs(x[1]), reverse=True)
-            self._save_top_features(position, "negative", names_and_coefs_neg, method="lasso")
-            self._append_summary_row("lasso", position, "negative", r2_negative, float(intercept_negative), names_and_coefs_neg)
-            self._log(f"pos {position} | LASSO negative R²={r2_negative:.3f}, b={intercept_negative:.3f} | top: {', '.join([n for n,_ in names_and_coefs_neg[:5]])}")
-
-            r2_positive, coef_positive, intercept_positive, _ = self.predictor.lr_components_and_norms(
-                positive_dots_train,
-                positive_dots_test,
-                positive_norms_train,
-                positive_norms_test
-            )
-
-            names_and_coefs_pos = list(zip(train_feature_names, coef_positive))
-            names_and_coefs_pos.sort(key=lambda x: abs(x[1]), reverse=True)
-            self._save_top_features(position, "positive", names_and_coefs_pos, method="lasso")
-            self._append_summary_row("lasso", position, "positive", r2_positive, float(intercept_positive), names_and_coefs_pos)
-            self._log(f"pos {position} | LASSO positive R²={r2_positive:.3f}, b={intercept_positive:.3f} | top: {', '.join([n for n,_ in names_and_coefs_pos[:5]])}")
-
     def run_analysis(self) -> ComponentAnalysisResults:
         """Run the complete component analysis using precomputed data."""
         # Initialize result dictionaries
@@ -616,12 +455,10 @@ def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
                 quiet=True,
                 save_details=False,
             )
-            analyzer.analyze_lasso()
-            analyzer.run_analysis()
+            analyzer.analyze_diff_means()
             analyzer.analyze_lasso_path()
 
             # Aggregate summaries from this analyzer instance
-            global_rows.extend(analyzer._lasso_summary_rows)
             global_rows.extend(analyzer._lars_summary_rows)
             global_rows.extend(analyzer._diff_summary_rows)
 
