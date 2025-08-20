@@ -391,7 +391,7 @@ class ComponentAnalyzer:
         if self.save_details:
             self._flush_summaries()
                 
-    def run_analysis(self) -> ComponentAnalysisResults:
+    def analyze_diff_means(self) -> ComponentAnalysisResults:
         """Run the complete component analysis using precomputed data."""
         # Initialize result dictionaries
         train_dict: Dict[int, Dict[str, float]] = {}
