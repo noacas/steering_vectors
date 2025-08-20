@@ -81,6 +81,8 @@ def get_dot_act(model: ModelBundle, dataset, pos, refusal_dir, cache_norms=False
     if get_aggregated_vector:
         for k in aggregated_vector_dict.keys():
             aggregated_vector_dict[k] /= len(dataset)
+        # Convert to a plain dict to avoid pickling the non-picklable lambda default_factory
+        aggregated_vector_dict = dict(aggregated_vector_dict)
 
         outputs.append(aggregated_vector_dict)
 

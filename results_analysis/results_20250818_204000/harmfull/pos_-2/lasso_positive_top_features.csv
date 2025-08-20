@@ -1,0 +1,11 @@
+feature,coef
+blocks.8.hook_mlp_out,1.2125436025174328
+blocks.9.hook_mlp_out,0.7656668480021983
+blocks.5.hook_mlp_out,0.4474230207022188
+blocks.5.hook_attn_out,0.18824907613356442
+blocks.3.hook_attn_out,0.08169794071774966
+blocks.7.hook_mlp_out,0.0438313337764024
+blocks.0.hook_resid_pre,0.01833733157244646
+blocks.0.hook_attn_out,0.0
+blocks.0.hook_mlp_out,0.0
+blocks.1.hook_attn_out,-0.0
