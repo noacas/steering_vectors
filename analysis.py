@@ -214,6 +214,7 @@ class ComponentAnalyzer:
         self._lars_summary_rows: List[List] = []
         # Diff-means summary rows with method="diff"; intercept and r2 left as None
         self._diff_summary_rows: List[List] = []
+        self._sim_summary_rows: List[List] = []
 
         # Choose prediction method based on multicomponent flag
         self.prediction_method = (
@@ -252,6 +253,8 @@ class ComponentAnalyzer:
         elif method == "diff":
             # For diff we store only top components as features string
             self._diff_summary_rows.append(common_prefix + [None, None, top_features_str])
+        elif method == "Component Similarities":
+            self._sim_summary_rows.append(common_prefix + [None, None, top_features_str])
 
     def _flush_summaries(self) -> None:
         vector_dir = self._get_vector_dir()
@@ -269,6 +272,11 @@ class ComponentAnalyzer:
             diff_cols = ["model", "steering_vector", "position", "method", "set", "r2", "intercept", "top_features"]
             pd.DataFrame(self._diff_summary_rows, columns=diff_cols).to_csv(
                 os.path.join(vector_dir, "diff_means_summary.csv"), index=False
+            )
+        if self._sim_summary_rows:
+            diff_cols = ["model", "steering_vector", "position", "method", "set", "r2", "intercept", "top_features"]
+            pd.DataFrame(self._sim_summary_rows, columns=diff_cols).to_csv(
+                os.path.join(vector_dir, "sim_summary.csv"), index=False
             )
 
     def _get_model_layer(self) -> int:
@@ -480,6 +488,7 @@ def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
             # Aggregate summaries from this analyzer instance
             global_rows.extend(analyzer._lars_summary_rows)
             global_rows.extend(analyzer._diff_summary_rows)
+            global_rows.extend(analyzer._sim_summary_rows)
 
     # Write a single combined CSV for all results
     if global_rows:
