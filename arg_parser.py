@@ -33,7 +33,13 @@ def parse_args():
         "--run_analysis",
         action="store_true",
         help="Only run analysis based on saved activations",
-        default=True,
+        default=False,
+    )
+    parser.add_argument(
+        "--run_visualize",
+        action="store_true",
+        help="Create graphs from results csv",
+        default=False,
     )
     parser.add_argument(
         "--pos",

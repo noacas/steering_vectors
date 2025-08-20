@@ -1,277 +1,324 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
-import os
-from typing import Optional, List, Tuple
+from pathlib import Path
+import warnings
+from collections import Counter
+import re
 
+warnings.filterwarnings('ignore')
 
-class LassoAnalysisVisualizer:
-    """
-    A class for visualizing Lasso regression analysis results from CSV data.
-    
-    This class provides comprehensive visualization methods for analyzing 
-    Lasso regression coefficients, R² scores, cosine similarities, and 
-    sparsity patterns across different positions.
-    """
-    
-    def __init__(self, csv_file_path: str, results_dir: Optional[str] = None):
-        """
-        Initialize the visualizer with data from CSV file.
+class Visualize:
+    def __init__(self, csv_path='summary_all.csv'):
+        """Initialize the visualizer with CSV data"""
+        self.df = pd.read_csv(csv_path)
+        self.setup_directories()
+        self.setup_style()
         
-        Args:
-            csv_file_path: Path to the CSV file containing Lasso analysis results
-            results_dir: Directory to save plots (defaults to current directory)
-        """
-        self.csv_file_path = csv_file_path
-        self.results_dir = results_dir or os.getcwd()
-        self.data = self._load_data()
+    def setup_directories(self):
+        """Create output directories for plots"""
+        Path('plots/gemma1').mkdir(parents=True, exist_ok=True)
+        Path('plots/gemma2').mkdir(parents=True, exist_ok=True)
         
-        # Extract column groups for easy access
-        self.cosine_cols = [col for col in self.data.columns if col.startswith('cosine_sim_')]
-        self.harmless_coef_cols = [col for col in self.data.columns if col.startswith('harmless_coef_')]
-        self.harmful_coef_cols = [col for col in self.data.columns if col.startswith('harmful_coef_')]
-        
-    def _load_data(self) -> pd.DataFrame:
-        """Load and validate the CSV data."""
-        try:
-            data = pd.read_csv(self.csv_file_path)
-            required_cols = ['position', 'harmless_r2', 'harmful_r2', 'harmless_intercept', 'harmful_intercept']
-            
-            missing_cols = [col for col in required_cols if col not in data.columns]
-            if missing_cols:
-                raise ValueError(f"Missing required columns: {missing_cols}")
-                
-            return data
-        except Exception as e:
-            raise ValueError(f"Error loading CSV file: {str(e)}")
-    
-    def plot_r2_scores(self, ax: Optional[plt.Axes] = None, save: bool = False) -> plt.Axes:
-        """Plot R² scores across positions."""
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 6))
-        
-        positions = self.data['position'].values
-        ax.plot(positions, self.data['harmless_r2'], 'o-', label='Harmless R²', linewidth=2)
-        ax.plot(positions, self.data['harmful_r2'], 's-', label='Harmful R²', linewidth=2)
-        ax.set_xlabel('Position')
-        ax.set_ylabel('R² Score')
-        ax.set_title('Lasso R² Scores Across Positions')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        
-        if save:
-            plt.savefig(os.path.join(self.results_dir, 'r2_scores.png'), 
-                       dpi=300, bbox_inches='tight')
-        
-        return ax
-    
-    def plot_cosine_similarities_heatmap(self, top_n: int = 10, ax: Optional[plt.Axes] = None, 
-                                       save: bool = False) -> plt.Axes:
-        """Plot heatmap of top cosine similarities."""
-        if not self.cosine_cols:
-            raise ValueError("No cosine similarity columns found in data")
-            
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(10, 8))
-        
-        cosine_data = self.data[['position'] + self.cosine_cols].set_index('position')
-        cosine_data.columns = [col.replace('cosine_sim_', '') for col in cosine_data.columns]
-        
-        # Show only top components by max absolute similarity
-        max_similarities = cosine_data.abs().max(axis=0).sort_values(ascending=False)
-        top_components = max_similarities.head(top_n).index
-        
-        sns.heatmap(cosine_data[top_components].T, 
-                   annot=True, fmt='.3f', cmap='RdBu_r', center=0,
-                   ax=ax, cbar_kws={'label': 'Cosine Similarity'})
-        ax.set_title(f'Top {top_n} Component Cosine Similarities')
-        ax.set_xlabel('Position')
-        ax.set_ylabel('Component')
-        
-        if save:
-            plt.savefig(os.path.join(self.results_dir, 'cosine_similarities_heatmap.png'), 
-                       dpi=300, bbox_inches='tight')
-        
-        return ax
-    
-    def plot_sparsity(self, ax: Optional[plt.Axes] = None, save: bool = False) -> plt.Axes:
-        """Plot the number of non-zero coefficients (sparsity) across positions."""
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 6))
-        
-        positions = self.data['position'].values
-        harmless_nonzero = (self.data[self.harmless_coef_cols] != 0).sum(axis=1)
-        harmful_nonzero = (self.data[self.harmful_coef_cols] != 0).sum(axis=1)
-        
-        ax.plot(positions, harmless_nonzero, 'o-', label='Harmless', linewidth=2)
-        ax.plot(positions, harmful_nonzero, 's-', label='Harmful', linewidth=2)
-        ax.set_xlabel('Position')
-        ax.set_ylabel('Number of Non-zero Coefficients')
-        ax.set_title('Lasso Sparsity Across Positions')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        
-        if save:
-            plt.savefig(os.path.join(self.results_dir, 'sparsity_plot.png'), 
-                       dpi=300, bbox_inches='tight')
-        
-        return ax
-    
-    def plot_coefficients_heatmap(self, coef_type: str = 'harmless', top_n: int = 8, 
-                                 ax: Optional[plt.Axes] = None, save: bool = False) -> plt.Axes:
-        """Plot heatmap of top coefficients by position."""
-        if coef_type == 'harmless':
-            coef_cols = self.harmless_coef_cols
-            title = 'Top Harmless Lasso Coefficients'
-            filename = 'harmless_coefficients_heatmap.png'
-        elif coef_type == 'harmful':
-            coef_cols = self.harmful_coef_cols
-            title = 'Top Harmful Lasso Coefficients'
-            filename = 'harmful_coefficients_heatmap.png'
-        else:
-            raise ValueError("coef_type must be 'harmless' or 'harmful'")
-        
-        if not coef_cols:
-            raise ValueError(f"No {coef_type} coefficient columns found in data")
-        
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(10, 8))
-        
-        coef_data = self.data[['position'] + coef_cols].set_index('position')
-        coef_data.columns = [col.replace(f'{coef_type}_coef_', '') for col in coef_data.columns]
-        
-        # Show components with highest max absolute coefficients
-        max_coefs = coef_data.abs().max(axis=0).sort_values(ascending=False)
-        top_coef_components = max_coefs.head(top_n).index
-        
-        sns.heatmap(coef_data[top_coef_components].T,
-                   annot=True, fmt='.3f', cmap='RdBu_r', center=0,
-                   ax=ax, cbar_kws={'label': 'Coefficient Value'})
-        ax.set_title(title)
-        ax.set_xlabel('Position')
-        ax.set_ylabel('Component')
-        
-        if save:
-            plt.savefig(os.path.join(self.results_dir, filename), 
-                       dpi=300, bbox_inches='tight')
-        
-        return ax
-    
-    def plot_coefficient_comparison(self, position_idx: Optional[int] = None, 
-                                   ax: Optional[plt.Axes] = None, save: bool = False) -> plt.Axes:
-        """Plot scatter comparison of harmless vs harmful coefficients at a specific position."""
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 8))
-        
-        if not self.harmless_coef_cols or not self.harmful_coef_cols:
-            raise ValueError("Both harmless and harmful coefficient columns are required")
-        
-        # Use most recent position if not specified
-        if position_idx is None:
-            position_idx = self.data['position'].idxmax()
-        
-        position_value = self.data.loc[position_idx, 'position']
-        harmless_coefs = self.data.loc[position_idx, self.harmless_coef_cols].values
-        harmful_coefs = self.data.loc[position_idx, self.harmful_coef_cols].values
-        
-        ax.scatter(harmless_coefs, harmful_coefs, alpha=0.7)
-        ax.set_xlabel('Harmless Coefficients')
-        ax.set_ylabel('Harmful Coefficients')
-        ax.set_title(f'Coefficient Comparison (Position {position_value})')
-        
-        # Add diagonal line
-        max_val = max(np.abs(harmless_coefs).max(), np.abs(harmful_coefs).max())
-        ax.plot([-max_val, max_val], [-max_val, max_val], 'r--', alpha=0.5)
-        ax.grid(True, alpha=0.3)
-        
-        if save:
-            plt.savefig(os.path.join(self.results_dir, f'coefficient_comparison_pos_{position_value}.png'), 
-                       dpi=300, bbox_inches='tight')
-        
-        return ax
-    
-    def create_comprehensive_plot(self, figsize: Tuple[int, int] = (20, 16), 
-                                 save: bool = True, filename: str = 'lasso_analysis_comprehensive.png') -> None:
-        """Create the comprehensive visualization with all plots."""
+    def setup_style(self):
+        """Set up matplotlib and seaborn styling"""
         plt.style.use('default')
-        fig = plt.figure(figsize=figsize)
+        sns.set_palette("husl")
+        plt.rcParams['figure.figsize'] = (10, 6)
+        plt.rcParams['font.size'] = 10
         
-        # 1. R² scores
-        ax1 = plt.subplot(2, 3, 1)
-        self.plot_r2_scores(ax=ax1)
-        
-        # 2. Cosine similarities heatmap
-        ax2 = plt.subplot(2, 3, 2)
-        if self.cosine_cols:
-            self.plot_cosine_similarities_heatmap(ax=ax2)
-        
-        # 3. Sparsity
-        ax3 = plt.subplot(2, 3, 3)
-        self.plot_sparsity(ax=ax3)
-        
-        # 4. Harmless coefficients heatmap
-        ax4 = plt.subplot(2, 3, 4)
-        if self.harmless_coef_cols:
-            self.plot_coefficients_heatmap('harmless', ax=ax4)
-        
-        # 5. Harmful coefficients heatmap
-        ax5 = plt.subplot(2, 3, 5)
-        if self.harmful_coef_cols:
-            self.plot_coefficients_heatmap('harmful', ax=ax5)
-        
-        # 6. Coefficient comparison
-        ax6 = plt.subplot(2, 3, 6)
-        if self.harmless_coef_cols and self.harmful_coef_cols:
-            self.plot_coefficient_comparison(ax=ax6)
-        
+    def get_model_data(self, model_name):
+        """Filter data for specific model"""
+        return self.df[self.df['model'] == model_name].copy()
+    
+    def save_plot(self, model_name, plot_name):
+        """Save plot to appropriate directory"""
+        model_dir = 'gemma1' if model_name == 'gemma' else 'gemma2'
         plt.tight_layout()
+        plt.savefig(f'plots/{model_dir}/{plot_name}.png', dpi=300, bbox_inches='tight')
+        plt.close()
         
-        if save:
-            plt.savefig(os.path.join(self.results_dir, filename), 
+    def r2_distribution_by_method(self):
+        """Create R² distribution plots by method for each model"""
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            
+            plt.figure(figsize=(12, 6))
+            sns.boxplot(data=data, x='method', y='r2', hue='set')
+            plt.title(f'R² Distribution by Method - {model.upper()}')
+            plt.xlabel('Method')
+            plt.ylabel('R² Score')
+            plt.legend(title='Set')
+            
+            self.save_plot(model, 'r2_distribution_by_method')
+            
+    def r2_by_position(self):
+        """Create R² distribution plots by position for each model"""
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            
+            plt.figure(figsize=(10, 6))
+            sns.boxplot(data=data, x='position', y='r2', hue='method')
+            plt.title(f'R² Distribution by Position - {model.upper()}')
+            plt.xlabel('Position')
+            plt.ylabel('R² Score')
+            plt.legend(title='Method')
+            
+            self.save_plot(model, 'r2_by_position')
+            
+    def model_performance_comparison(self):
+        """Create side-by-side model performance comparison"""
+        plt.figure(figsize=(14, 6))
+        
+        # Create violin plots for both models
+        model_data = []
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            data['model_label'] = model.upper()
+            model_data.append(data)
+        
+        combined_data = pd.concat(model_data)
+        
+        sns.violinplot(data=combined_data, x='model_label', y='r2', hue='set')
+        plt.title('Model Performance Comparison: R² Distributions')
+        plt.xlabel('Model')
+        plt.ylabel('R² Score')
+        plt.legend(title='Set')
+        
+        # Save to both directories
+        plt.tight_layout()
+        plt.savefig('plots/gemma1/model_comparison.png', dpi=300, bbox_inches='tight')
+        plt.savefig('plots/gemma2/model_comparison.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        
+    def steering_vector_performance_heatmap(self):
+        """Create heatmap of steering vector performance"""
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            
+            # Create pivot table for heatmap
+            pivot_data = data.pivot_table(
+                values='r2', 
+                index='steering_vector', 
+                columns='method', 
+                aggfunc='mean'
+            )
+            
+            plt.figure(figsize=(8, 10))
+            sns.heatmap(pivot_data, annot=True, fmt='.3f', cmap='viridis')
+            plt.title(f'Steering Vector Performance by Method - {model.upper()}')
+            plt.xlabel('Method')
+            plt.ylabel('Steering Vector')
+            
+            self.save_plot(model, 'steering_vector_heatmap')
+            
+    def set_performance_analysis(self):
+        """Analyze performance across different sets"""
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            
+            plt.figure(figsize=(10, 6))
+            sns.barplot(data=data, x='set', y='r2', estimator=np.mean, ci=95)
+            plt.title(f'Average R² by Set Type - {model.upper()}')
+            plt.xlabel('Set Type')
+            plt.ylabel('Average R² Score')
+            plt.xticks(rotation=45)
+            
+            self.save_plot(model, 'set_performance_analysis')
+            
+    def method_position_interaction(self):
+        """Create interaction plot between method and position"""
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            
+            # Calculate mean R² for each method-position combination
+            interaction_data = data.groupby(['method', 'position'])['r2'].mean().reset_index()
+            
+            plt.figure(figsize=(10, 6))
+            for method in data['method'].unique():
+                method_data = interaction_data[interaction_data['method'] == method]
+                plt.plot(method_data['position'], method_data['r2'], 
+                        marker='o', label=method, linewidth=2, markersize=8)
+            
+            plt.title(f'Method × Position Interaction - {model.upper()}')
+            plt.xlabel('Position')
+            plt.ylabel('Average R² Score')
+            plt.legend(title='Method')
+            plt.grid(True, alpha=0.3)
+            
+            self.save_plot(model, 'method_position_interaction')
+            
+    def top_features_analysis(self):
+        """Analyze and visualize top features"""
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            
+            # Extract all features from top_features column
+            all_features = []
+            for features_str in data['top_features'].dropna():
+                # Parse feature strings like "blocks.8.hook_mlp_out:1.0842"
+                features = features_str.split(';')
+                for feature in features:
+                    if ':' in feature:
+                        feature_name = feature.split(':')[0].strip()
+                        all_features.append(feature_name)
+            
+            # Count feature frequencies
+            feature_counts = Counter(all_features)
+            
+            # Create bar plot of top 20 features
+            top_features = dict(feature_counts.most_common(20))
+            
+            plt.figure(figsize=(12, 8))
+            plt.barh(range(len(top_features)), list(top_features.values()))
+            plt.yticks(range(len(top_features)), list(top_features.keys()))
+            plt.xlabel('Frequency')
+            plt.title(f'Top 20 Most Important Features - {model.upper()}')
+            plt.gca().invert_yaxis()
+            
+            self.save_plot(model, 'top_features_frequency')
+            
+    def feature_pattern_analysis(self):
+        """Analyze patterns in feature types"""
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            
+            # Categorize features by type
+            feature_types = {'hook_mlp_out': 0, 'hook_attn_out': 0, 'hook_resid_pre': 0, 'other': 0}
+            
+            for features_str in data['top_features'].dropna():
+                features = features_str.split(';')
+                for feature in features:
+                    if ':' in feature:
+                        feature_name = feature.split(':')[0].strip()
+                        if 'hook_mlp_out' in feature_name:
+                            feature_types['hook_mlp_out'] += 1
+                        elif 'hook_attn_out' in feature_name:
+                            feature_types['hook_attn_out'] += 1
+                        elif 'hook_resid_pre' in feature_name:
+                            feature_types['hook_resid_pre'] += 1
+                        else:
+                            feature_types['other'] += 1
+            
+            plt.figure(figsize=(8, 6))
+            plt.pie(feature_types.values(), labels=feature_types.keys(), autopct='%1.1f%%')
+            plt.title(f'Distribution of Feature Types - {model.upper()}')
+            
+            self.save_plot(model, 'feature_pattern_analysis')
+            
+    def correlation_matrix(self):
+        """Create correlation matrix for numerical variables"""
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            
+            # Select numerical columns and encode categorical ones
+            numerical_data = data[['position', 'r2', 'intercept']].copy()
+            
+            # Add encoded categorical variables
+            numerical_data['method_encoded'] = pd.Categorical(data['method']).codes
+            numerical_data['set_encoded'] = pd.Categorical(data['set']).codes
+            numerical_data['steering_vector_encoded'] = pd.Categorical(data['steering_vector']).codes
+            
+            # Calculate correlation matrix
+            corr_matrix = numerical_data.corr()
+            
+            plt.figure(figsize=(10, 8))
+            sns.heatmap(corr_matrix, annot=True, fmt='.3f', cmap='coolwarm', center=0)
+            plt.title(f'Correlation Matrix - {model.upper()}')
+            
+            self.save_plot(model, 'correlation_matrix')
+            
+    def faceted_analysis(self):
+        """Create comprehensive faceted analysis"""
+        for model in ['gemma', 'gemma2']:
+            data = self.get_model_data(model)
+            
+            # Create faceted plot
+            fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+            fig.suptitle(f'Comprehensive Analysis - {model.upper()}', fontsize=16)
+            
+            # Plot 1: R² by method
+            sns.boxplot(data=data, x='method', y='r2', ax=axes[0,0])
+            axes[0,0].set_title('R² by Method')
+            
+            # Plot 2: R² by position
+            sns.boxplot(data=data, x='position', y='r2', ax=axes[0,1])
+            axes[0,1].set_title('R² by Position')
+            
+            # Plot 3: R² by set
+            sns.boxplot(data=data, x='set', y='r2', ax=axes[0,2])
+            axes[0,2].set_title('R² by Set')
+            axes[0,2].tick_params(axis='x', rotation=45)
+            
+            # Plot 4: Method vs Position heatmap
+            pivot_mp = data.pivot_table(values='r2', index='method', columns='position', aggfunc='mean')
+            sns.heatmap(pivot_mp, annot=True, fmt='.3f', ax=axes[1,0])
+            axes[1,0].set_title('Method × Position')
+            
+            # Plot 5: R² distribution
+            axes[1,1].hist(data['r2'], bins=20, alpha=0.7, edgecolor='black')
+            axes[1,1].set_xlabel('R² Score')
+            axes[1,1].set_ylabel('Frequency')
+            axes[1,1].set_title('R² Distribution')
+            
+            # Plot 6: Intercept vs R²
+            sns.scatterplot(data=data, x='intercept', y='r2', hue='method', ax=axes[1,2])
+            axes[1,2].set_title('Intercept vs R²')
+            
+            plt.tight_layout()
+            plt.savefig(f'plots/{"gemma1" if model == "gemma" else "gemma2"}/faceted_analysis.png', 
                        dpi=300, bbox_inches='tight')
-        plt.show()
-    
-    def get_summary_stats(self) -> dict:
-        """Get summary statistics of the analysis results."""
-        stats = {
-            'positions': self.data['position'].tolist(),
-            'harmless_r2_range': (self.data['harmless_r2'].min(), self.data['harmless_r2'].max()),
-            'harmful_r2_range': (self.data['harmful_r2'].min(), self.data['harmful_r2'].max()),
-            'avg_harmless_sparsity': (self.data[self.harmless_coef_cols] != 0).sum(axis=1).mean(),
-            'avg_harmful_sparsity': (self.data[self.harmful_coef_cols] != 0).sum(axis=1).mean(),
-            'num_components': len(self.cosine_cols),
-            'num_positions': len(self.data)
-        }
-        return stats
-    
-    def print_summary(self) -> None:
-        """Print a summary of the analysis results."""
-        stats = self.get_summary_stats()
-        print("=== Lasso Analysis Summary ===")
-        print(f"Positions analyzed: {stats['positions']}")
-        print(f"Number of positions: {stats['num_positions']}")
-        print(f"Number of components: {stats['num_components']}")
-        print(f"Harmless R² range: {stats['harmless_r2_range'][0]:.3f} - {stats['harmless_r2_range'][1]:.3f}")
-        print(f"Harmful R² range: {stats['harmful_r2_range'][0]:.3f} - {stats['harmful_r2_range'][1]:.3f}")
-        print(f"Average harmless sparsity: {stats['avg_harmless_sparsity']:.1f} non-zero coefficients")
-        print(f"Average harmful sparsity: {stats['avg_harmful_sparsity']:.1f} non-zero coefficients")
+            plt.close()
+            
+    def generate_all_plots(self):
+        """Generate all visualization plots"""
+        print("Generating all visualizations...")
+        
+        print("1. R² distribution by method...")
+        self.r2_distribution_by_method()
+        
+        print("2. R² by position...")
+        self.r2_by_position()
+        
+        print("3. Model performance comparison...")
+        self.model_performance_comparison()
+        
+        print("4. Steering vector performance heatmap...")
+        self.steering_vector_performance_heatmap()
+        
+        print("5. Set performance analysis...")
+        self.set_performance_analysis()
+        
+        print("6. Method-position interaction...")
+        self.method_position_interaction()
+        
+        print("7. Top features analysis...")
+        self.top_features_analysis()
+        
+        print("8. Feature pattern analysis...")
+        self.feature_pattern_analysis()
+        
+        print("9. Correlation matrix...")
+        self.correlation_matrix()
+        
+        print("10. Faceted analysis...")
+        self.faceted_analysis()
+        
+        print("All visualizations completed!")
+        print("Plots saved in:")
+        print("- plots/gemma1/")
+        print("- plots/gemma2/")
 
-
+# Example usage:
 if __name__ == "__main__":
-    # Initialize the visualizer
-    visualizer = LassoAnalysisVisualizer('lasso_analysis.csv', results_dir='./plots')
+    # Initialize visualizer
+    viz = Visualize('summary_all.csv')
     
-    # Print summary
-    visualizer.print_summary()
+    # Generate all plots
+    viz.generate_all_plots()
     
-    # Create comprehensive plot
-    visualizer.create_comprehensive_plot()
-    
-    # Create individual plots
-    visualizer.plot_r2_scores(save=True)
-    visualizer.plot_sparsity(save=True)
-    visualizer.plot_cosine_similarities_heatmap(save=True)
-    visualizer.plot_coefficients_heatmap('harmless', save=True)
-    visualizer.plot_coefficients_heatmap('harmful', save=True)
-    visualizer.plot_coefficient_comparison(save=True)
+    # Or generate individual plots:
+    # viz.r2_distribution_by_method()
+    # viz.correlation_matrix()
+    # etc.

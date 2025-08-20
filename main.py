@@ -12,7 +12,7 @@ from collections import defaultdict
 from collect_data import DataCollector
 from utils import create_timestamped_results_dir
 from datetime import datetime
-
+from visualize import Visualize
 
 def get_steering_vector_names_for_gemma2():
     path = "content/axbench_chosen_dataset/"
@@ -33,9 +33,6 @@ def get_last_data_path(data_dir):
 
 def main():
     # Load the model bundle
-    model_bundle = ModelBundle(args.model, args.steering_vector)
-    #compare_component_prediction_r2(model_bundle=model_bundle)
-    predict_dot_product_lasso(model_bundle=model_bundle)
     args = parse_args()
     data_dir = args.data_dir
     os.makedirs(data_dir, exist_ok=True)
@@ -77,6 +74,10 @@ def main():
     if args.run_analysis:
         analyze(data=data, results_dir=results_dir)
 
-
+    if args.run_visualize:
+        csv_file_path = "/home/joberant/NLP_2425b/troyansky1/steering_vectors/results_analysis/results_20250818_204000/summary_all.csv"
+        viz = Visualize(csv_file_path)
+        viz.generate_all_plots()
+        
 if __name__ == "__main__":
     main()
