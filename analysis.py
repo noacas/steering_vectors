@@ -185,9 +185,16 @@ class ComponentPredictor:
         lasso = Lasso(alpha=chosen_alpha)
         lasso.fit(X_train, target_train)
 
-        r2 = lasso.score(X_test, target_test)
+        forced_lasso = Lasso(alpha=chosen_alpha)
+        forced_lasso.coef_ = chosen_coefs
 
-        return r2, lasso.coef_, alphas, coefs, used_feature_names
+        r2 = lasso.score(X_test, target_test)
+        forced_r2 = forced_lasso.score(X_test, target_test)
+
+        print(f"R² with forced Lasso: {forced_r2:.3f}")
+        print(f"R² with Lasso: {r2:.3f}")
+
+        return r2, forced_r2, lasso.coef_, alphas, coefs, used_feature_names
 
     def lr_components_and_norms(self, dot_prod_dict_train: List[Dict],
                                 dot_prod_dict_test: List[Dict],
