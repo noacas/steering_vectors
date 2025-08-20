@@ -369,7 +369,8 @@ class ComponentAnalyzer:
         final_sorted_indices = active_feature_indices[np.argsort(-active_entry_order)]
 
         ordered_feature_names = [train_feature_names[i] for i in final_sorted_indices]
-        names_and_coeffs = list(zip(ordered_feature_names, chosen_coefs))
+        ordered_coefs = chosen_coefs[final_sorted_indices]
+        names_and_coeffs = list(zip(ordered_feature_names, ordered_coefs))
 
         # Save concise results
         if self.save_details:
@@ -474,6 +475,7 @@ def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
             )
             analyzer.analyze_diff_means()
             analyzer.analyze_lasso_path()
+            analyzer.analyze_component_similarities()
 
             # Aggregate summaries from this analyzer instance
             global_rows.extend(analyzer._lars_summary_rows)
