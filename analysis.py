@@ -234,8 +234,6 @@ class ComponentAnalyzer:
         os.makedirs(position_dir, exist_ok=True)
         return position_dir
 
-    def 
-
     def _save_top_features(self, position: int, set_name: str, features_and_coefs: List[Tuple[str, float]], method: str) -> None:
         position_dir = self._get_position_dir(position)
         df = pd.DataFrame(features_and_coefs[: self.top_k], columns=["feature", "coef"])
