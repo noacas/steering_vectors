@@ -24,6 +24,8 @@ class ComponentAnalysisResults:
     test_df: pd.DataFrame
     positive_r2s_df: pd.DataFrame
     negative_r2s_df: pd.DataFrame
+    positive_pvals_df: pd.DataFrame  
+    negative_pvals_df: pd.DataFrame  
 
 
 class ComponentPredictor:
@@ -45,13 +47,20 @@ class ComponentPredictor:
             for example in range(len(dot_prod_dict))
         ])
 
-    def _fit_and_predict(self, X_train: np.ndarray, y_train: np.ndarray,
-                         X_test: np.ndarray, y_test: np.ndarray) -> float:
-        """Fit linear regression and return R² score."""
+    def _fit_and_predict(self, X_train, y_train, X_test, y_test):
+        """Fit linear regression and return R² score and F-test p-value.
+        Tests whether the component significantly predicts residual stream alignment."""
         lr = LinearRegression()
         lr.fit(X_train, y_train)
         predictions = lr.predict(X_test)
-        return r2_score(y_test, predictions)
+        r2 = r2_score(y_test, predictions)
+        
+        # F-test for model significance
+        n, k = len(y_test), X_train.shape[1]
+        f_stat = (r2 / k) / ((1 - r2) / (n - k - 1))
+        p_value = 1 - stats.f.cdf(f_stat, k, n - k - 1)
+        
+        return r2, p_value
 
     def compute_single_component_r2(self, dot_prod_dict_train: List[Dict],
                                     dot_prod_dict_test: List[Dict]) -> Dict[str, float]:
@@ -61,26 +70,28 @@ class ComponentPredictor:
         target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
         target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
 
-        r2_scores = {}
+        results = {} # Changed from r2_scores
         for component_name in component_names:
             features_train = self._extract_dot_products(dot_prod_dict_train, component_name).reshape(-1, 1)
             features_test = self._extract_dot_products(dot_prod_dict_test, component_name).reshape(-1, 1)
-
-            r2_scores[component_name] = self._fit_and_predict(
+            
+            r2, p_value = self._fit_and_predict(
                 features_train, target_train, features_test, target_test
             )
 
-        return r2_scores
+            results[component_name] = (r2, p_value)
+
+        return results
 
     def compute_multi_component_r2(self, dot_prod_dict_train: List[Dict],
-                                   dot_prod_dict_test: List[Dict]) -> Dict[str, float]:
-        """Compute R² scores for two-component predictions."""
+                               dot_prod_dict_test: List[Dict]) -> Dict[str, Tuple[float, float]]:
+        """Compute R² scores and p-values for two-component predictions."""
         component_names = list(dot_prod_dict_train[0].keys())
 
         target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
         target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
 
-        r2_scores = {}
+        results = {}  # Changed from r2_scores
         for c1, c2 in itertools.combinations(component_names, 2):
             # Stack features for two components
             features_train = np.stack([
@@ -93,12 +104,12 @@ class ComponentPredictor:
                 self._extract_dot_products(dot_prod_dict_test, c2)
             ], axis=1)
 
-            # Note: Original code had a bug - should not reshape to (-1, 1) for multi-component
-            r2_scores[f"{c1} x {c2}"] = self._fit_and_predict(
+            r2, p_value = self._fit_and_predict(  # Now unpacking tuple
                 features_train, target_train, features_test, target_test
             )
+            results[f"{c1} x {c2}"] = (r2, p_value)  # Store both values
 
-        return r2_scores
+        return results
 
     def _fit_lasso_path(self, X_train: np.ndarray, y_train: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Fit LARS path and return (alphas, coefs)."""
@@ -327,6 +338,8 @@ class ComponentAnalyzer:
         test_df = pd.DataFrame(test_dict)
         positive_r2s_df = pd.DataFrame(positive_dict)
         negative_r2s_df = pd.DataFrame(negative_dict)
+        positive_pvals_df = pd.DataFrame(positive_pvals_dict)
+        negative_pvals_df = pd.DataFrame(negative_pvals_dict)
 
         # Save to CSV (only if detailed saving is enabled)
         if self.save_details:
@@ -334,12 +347,16 @@ class ComponentAnalyzer:
             test_df.to_csv(os.path.join(vector_dir, 'test_diff_means.csv'))
             positive_r2s_df.to_csv(os.path.join(vector_dir, 'positive_r2s.csv'))
             negative_r2s_df.to_csv(os.path.join(vector_dir, 'negative_r2s.csv'))
+            positive_pvals_df.to_csv(os.path.join(vector_dir, 'positive_pvals.csv'))
+            negative_pvals_df.to_csv(os.path.join(vector_dir, 'negative_pvals.csv'))
 
         return ComponentAnalysisResults(
             train_df=train_df,
             test_df=test_df,
             positive_r2s_df=positive_r2s_df,
-            negative_r2s_df=negative_r2s_df
+            negative_r2s_df=negative_r2s_df,
+            positive_pvals_df=positive_pvals_df,  # ADD THIS
+            negative_pvals_df=negative_pvals_df   # ADD THIS
         )
 
     def analyze_component_similarities(self) -> None:
@@ -386,7 +403,6 @@ class ComponentAnalyzer:
         self._append_summary_row("lars", position, set_name, r2, None, names_and_coeffs)
         self._log(f"pos {position} | LARS negative R²={r2:.3f} | top: {', '.join([n for n,_ in names_and_coeffs[:5]])}")
 
-
     def analyze_lasso_path(self) -> None:
         for position in self.positions:
 
@@ -425,6 +441,10 @@ class ComponentAnalyzer:
         negative_dict: Dict[int, Dict[str, float]] = {}
         positive_dict: Dict[int, Dict[str, float]] = {}
 
+        # Dict's for P values
+        negative_pvals_dict: Dict[int, Dict[str, float]] = {}
+        positive_pvals_dict: Dict[int, Dict[str, float]] = {}
+
         # Analyze each position
         for position in self.positions:
             negative_outputs_train, positive_outputs_train, negative_outputs_test, positive_outputs_test = self.data[position]
@@ -434,10 +454,14 @@ class ComponentAnalyzer:
             negative_dots_test = negative_outputs_test[0]
             positive_dots_test = positive_outputs_test[0]
 
+            # Compute R² scores and p-values
+            negative_results = self.prediction_method(negative_dots_train, negative_dots_test)
+            positive_results = self.prediction_method(positive_dots_train, positive_dots_test)
             
-            # Compute R² scores
-            negative_r2s = self.prediction_method(negative_dots_train, negative_dots_test)
-            positive_r2s = self.prediction_method(positive_dots_train, positive_dots_test)
+            negative_r2s = {k: v[0] for k, v in negative_results.items()}
+            positive_r2s = {k: v[0] for k, v in positive_results.items()}
+            negative_pvals_dict[position] = {k: v[1] for k, v in negative_results.items()}
+            positive_pvals_dict[position] = {k: v[1] for k, v in positive_results.items()}
 
             # Compute mean differences
             diff_means_train = self._compute_mean_differences(
@@ -460,7 +484,8 @@ class ComponentAnalyzer:
             top_names = ", ".join([name for name, _ in positive_top[:5]])
             self._log(f"pos {position} | run_analysis Δmeans top: {top_names}")
 
-        return self._save_results(train_dict, test_dict, negative_dict, positive_dict)
+        return self._save_results(train_dict, test_dict, negative_dict, positive_dict, 
+                         negative_pvals_dict, positive_pvals_dict)
 
 
 def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
