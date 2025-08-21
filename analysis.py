@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression, Lasso, lars_path
 import torch
+from scipy import stats
 
 from dot_act import get_mean_dot_prod
 from utils import dict_subtraction
@@ -27,6 +28,80 @@ class ComponentAnalysisResults:
     positive_pvals_df: pd.DataFrame  
     negative_pvals_df: pd.DataFrame  
 
+def _extract_pval_data(results: ComponentAnalysisResults, model_name: str, steering_vector: str) -> Tuple[List[List], List[List]]:
+    """Extract p-value data from results into list format for CSV."""
+    pval_cols = ["model", "steering_vector", "position", "component", "r2", "p_value"]
+    
+    positive_rows = []
+    negative_rows = []
+    
+    # Extract positive p-values
+    for position in results.positive_pvals_df.columns:
+        for component in results.positive_pvals_df.index:
+            p_val = results.positive_pvals_df.loc[component, position]
+            r2_val = results.positive_r2s_df.loc[component, position]
+            positive_rows.append([model_name, steering_vector, position, component, r2_val, p_val])
+    
+    # Extract negative p-values
+    for position in results.negative_pvals_df.columns:
+        for component in results.negative_pvals_df.index:
+            p_val = results.negative_pvals_df.loc[component, position]
+            r2_val = results.negative_r2s_df.loc[component, position]
+            negative_rows.append([model_name, steering_vector, position, component, r2_val, p_val])
+    
+    return positive_rows, negative_rows
+
+def _save_global_pval_csvs(all_positive_pvals: List[List], all_negative_pvals: List[List], results_dir: str) -> None:
+    """Save aggregated p-value data to CSV files in multiple formats."""
+    pval_cols = ["model", "steering_vector", "position", "component", "r2", "p_value"]
+    
+    if all_positive_pvals:
+        positive_df = pd.DataFrame(all_positive_pvals, columns=pval_cols)
+        
+        # Format 1: Component-position combinations (rows) vs steering vectors (columns)
+        positive_df['component_pos'] = positive_df['component'] + '_pos' + positive_df['position'].astype(str)
+        combo_pivot = positive_df.pivot_table(
+            index='component_pos', 
+            columns='steering_vector', 
+            values='p_value', 
+            aggfunc='mean'
+        )
+        combo_pivot.to_csv(os.path.join(results_dir, "positive_pvals_by_combo.csv"))
+        
+        # Format 2: Separate files for each position
+        for position in positive_df['position'].unique():
+            pos_data = positive_df[positive_df['position'] == position]
+            pos_pivot = pos_data.pivot_table(
+                index='component', 
+                columns='steering_vector', 
+                values='p_value', 
+                aggfunc='mean'
+            )
+            pos_pivot.to_csv(os.path.join(results_dir, f"positive_pvals_pos{position}.csv"))
+    
+    if all_negative_pvals:
+        negative_df = pd.DataFrame(all_negative_pvals, columns=pval_cols)
+        
+        # Format 1: Component-position combinations  
+        negative_df['component_pos'] = negative_df['component'] + '_pos' + negative_df['position'].astype(str)
+        combo_pivot = negative_df.pivot_table(
+            index='component_pos', 
+            columns='steering_vector', 
+            values='p_value', 
+            aggfunc='mean'
+        )
+        combo_pivot.to_csv(os.path.join(results_dir, "negative_pvals_by_combo.csv"))
+        
+        # Format 2: Separate files for each position
+        for position in negative_df['position'].unique():
+            pos_data = negative_df[negative_df['position'] == position]
+            pos_pivot = pos_data.pivot_table(
+                index='component', 
+                columns='steering_vector', 
+                values='p_value', 
+                aggfunc='mean'
+            )
+            pos_pivot.to_csv(os.path.join(results_dir, f"negative_pvals_pos{position}.csv"))
 
 class ComponentPredictor:
     """Handles component prediction analysis using linear regression."""
@@ -47,7 +122,8 @@ class ComponentPredictor:
             for example in range(len(dot_prod_dict))
         ])
 
-    def _fit_and_predict(self, X_train, y_train, X_test, y_test):
+    def _fit_and_predict(self, X_train: np.ndarray, y_train: np.ndarray,
+                        X_test: np.ndarray, y_test: np.ndarray) -> Tuple[float, float]:
         """Fit linear regression and return R² score and F-test p-value.
         Tests whether the component significantly predicts residual stream alignment."""
         lr = LinearRegression()
@@ -57,8 +133,13 @@ class ComponentPredictor:
         
         # F-test for model significance
         n, k = len(y_test), X_train.shape[1]
-        f_stat = (r2 / k) / ((1 - r2) / (n - k - 1))
-        p_value = 1 - stats.f.cdf(f_stat, k, n - k - 1)
+        
+        # Handle edge cases (r2 was one)
+        if r2 >= 0.9999 or n <= k + 1:  # Perfect fit or insufficient data
+            p_value = 0.0  # Highly significant            
+        else:
+            f_stat = (r2 / k) / ((1 - r2) / (n - k - 1))
+            p_value = 1 - stats.f.cdf(f_stat, k, n - k - 1)
         
         return r2, p_value
 
@@ -267,6 +348,20 @@ class ComponentAnalyzer:
         elif method == "Component Similarities":
             self._sim_summary_rows.append(common_prefix + [None, None, top_features_str])
 
+    def _append_r2_summary_rows(self, position: int, negative_results: Dict, positive_results: Dict) -> None:
+        """Add R² summary rows for negative and positive results."""
+        for component_name, (r2, p_val) in negative_results.items():
+            self._lars_summary_rows.append([
+                self.model_name, self.steering_vector, position, "r2_prediction", "negative", 
+                r2, p_val, None, component_name
+            ])
+        
+        for component_name, (r2, p_val) in positive_results.items():
+            self._lars_summary_rows.append([
+                self.model_name, self.steering_vector, position, "r2_prediction", "positive", 
+                r2, p_val, None, component_name
+            ])
+
     def _flush_summaries(self) -> None:
         vector_dir = self._get_vector_dir()
         if self._lasso_summary_rows:
@@ -324,7 +419,8 @@ class ComponentAnalyzer:
         return sorted_components
 
     def _save_results(self, train_dict: Dict, test_dict: Dict,
-                      negative_dict: Dict, positive_dict: Dict) -> ComponentAnalysisResults:
+                    negative_dict: Dict, positive_dict: Dict,
+                    negative_pvals_dict: Dict, positive_pvals_dict: Dict) -> ComponentAnalysisResults:
         """Save results to CSV files and return as structured data.
 
         Files are organized under results_dir/<steering_vector>/.
@@ -346,9 +442,10 @@ class ComponentAnalyzer:
             train_df.to_csv(os.path.join(vector_dir, 'train_diff_means.csv'))
             test_df.to_csv(os.path.join(vector_dir, 'test_diff_means.csv'))
             positive_r2s_df.to_csv(os.path.join(vector_dir, 'positive_r2s.csv'))
-            negative_r2s_df.to_csv(os.path.join(vector_dir, 'negative_r2s.csv'))
+            negative_r2s_df.to_csv(os.path.join(vector_dir, 'negative_r2s.csv'))            
             positive_pvals_df.to_csv(os.path.join(vector_dir, 'positive_pvals.csv'))
             negative_pvals_df.to_csv(os.path.join(vector_dir, 'negative_pvals.csv'))
+        
 
         return ComponentAnalysisResults(
             train_df=train_df,
@@ -494,6 +591,8 @@ def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
     global_cols = [
         "model", "steering_vector", "position", "method", "set", "r2", "intercept", "top_features"
     ]
+    all_positive_pvals = []
+    all_negative_pvals = []
 
     for model_name, model_data in data.items():
         for steering_vector, per_vector_data in model_data.items():
@@ -506,9 +605,14 @@ def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
                 quiet=True,
                 save_details=False,
             )
-            analyzer.analyze_diff_means()
+            diff_means_results = analyzer.analyze_diff_means()
             analyzer.analyze_lasso_path()
             analyzer.analyze_component_similarities()
+
+            # Collect p-value data
+            pos_pvals, neg_pvals = _extract_pval_data(diff_means_results, model_name, steering_vector)
+            all_positive_pvals.extend(pos_pvals)
+            all_negative_pvals.extend(neg_pvals)
 
             # Aggregate summaries from this analyzer instance
             global_rows.extend(analyzer._lars_summary_rows)
@@ -520,3 +624,4 @@ def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
         combined_df = pd.DataFrame(global_rows, columns=global_cols)
         combined_df.to_csv(os.path.join(results_dir, "summary_all.csv"), index=False)
 
+    _save_global_pval_csvs(all_positive_pvals, all_negative_pvals, results_dir)
