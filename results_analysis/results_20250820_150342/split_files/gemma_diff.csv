@@ -1,0 +1,4 @@
+model,steering_vector,position,method,set,r2,intercept,top_features
+gemma,harmfull,-1,diff,pos-vs-neg,,,10.residual:2.7113; 0.residual:1.7970; 0.attention:-0.8437; 1.attention:-0.5618; 5.mlp:0.4823; 7.mlp:0.4053; 3.mlp:0.3047; 6.mlp:0.2816; 1.mlp:-0.2614; 9.mlp:0.2458
+gemma,harmfull,-2,diff,pos-vs-neg,,,10.residual:2.6188; 0.residual:1.3291; 0.attention:0.5382; 6.attention:0.4249; 1.attention:-0.3427; 2.mlp:-0.3183; 8.mlp:0.3011; 0.mlp:-0.2848; 8.attention:0.1958; 1.mlp:-0.1769
+gemma,harmfull,-3,diff,pos-vs-neg,,,10.residual:3.3920; 0.attention:0.4806; 0.mlp:0.4737; 8.mlp:0.4520; 5.mlp:0.3413; 7.mlp:0.2916; 9.mlp:0.2886; 6.mlp:0.2027; 3.mlp:0.1876; 5.attention:0.1787

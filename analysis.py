@@ -204,7 +204,7 @@ class ComponentAnalyzer:
         self.predictor = ComponentPredictor(self._get_model_layer(), self.model_name)
         self.multicomponent = multicomponent
         self.results_dir = results_dir
-        self.top_k: int = 10
+        self.top_k: int = 100 # Effectively ignoring top_k
         self.quiet: bool = quiet
         self.save_details: bool = save_details
 
@@ -365,7 +365,7 @@ class ComponentAnalyzer:
             norms_test
         )
         
-        entry_order_indices = np.argmin(np.abs(coefs) > 0, axis=1)
+        entry_order_indices = np.argmax(np.abs(coefs) > 0, axis=1)
 
         active_features_mask = np.any(np.abs(coefs) > 0, axis=1)
         active_feature_indices = np.where(active_features_mask)[0]
@@ -374,7 +374,7 @@ class ComponentAnalyzer:
         active_entry_order = entry_order_indices[active_feature_indices]
 
         # Sort the active features by their entry order
-        final_sorted_indices = active_feature_indices[np.argsort(-active_entry_order)]
+        final_sorted_indices = active_feature_indices[np.argsort(active_entry_order)]
 
         ordered_feature_names = [train_feature_names[i] for i in final_sorted_indices]
         ordered_coefs = chosen_coefs[final_sorted_indices]
