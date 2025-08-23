@@ -20,7 +20,8 @@ class DataCollector:
         self.positions = positions
 
     def _get_data_subsets(self) -> Tuple[List[str], List[str], List[str], List[str]]:
-        subset_len = len(self.model_bundle.positive_inst_train)
+        # subset_len = len(self.model_bundle.positive_inst_train)
+        subset_len = 10000
         
         # Harmless = negative; Harmful = positive
         return (
