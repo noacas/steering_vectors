@@ -156,14 +156,14 @@ class ComponentPredictor:
         X_test = X_test[:, keep_mask]
         used_feature_names = [name for name, keep in zip(train_feature_names, keep_mask) if keep]
 
-        col_mean = X_train.mean(axis=0)
-        col_std = np.clip(X_train.std(axis=0), 1e-12, None)
-        X_train = (X_train - col_mean) / col_std
-        X_test = (X_test - col_mean) / col_std
+        # col_mean = X_train.mean(axis=0)
+        # col_std = np.clip(X_train.std(axis=0), 1e-12, None)
+        # X_train = (X_train - col_mean) / col_std
+        # X_test = (X_test - col_mean) / col_std
 
-        target_mean = target_train.mean()
-        target_train = target_train - target_mean
-        target_test = target_test - target_mean
+        # target_mean = target_train.mean()
+        # target_train = target_train - target_mean
+        # target_test = target_test - target_mean
 
         # Compute path with warnings suppressed for numerical edge cases
         with warnings.catch_warnings():
@@ -184,7 +184,8 @@ class ComponentPredictor:
         chosen_alpha = alphas[chosen_index]
         chosen_coefs = coefs[:, chosen_index]
 
-        lasso = Lasso(alpha=chosen_alpha)
+        # lasso = Lasso(alpha=chosen_alpha)
+        lasso = Lasso(alpha=0.0)
         lasso.fit(X_train, target_train)
 
         r2 = lasso.score(X_test, target_test) 

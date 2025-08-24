@@ -63,7 +63,7 @@ def get_dot_act(model: ModelBundle, dataset, pos, refusal_dir, cache_norms=False
                 if cache_norms:
                     norm_cache[component_name] = torch.norm(cache[component_name], dim=-1).detach().cpu()[0, pos].item()
                 if get_aggregated_vector:
-                    aggregated_vector_dict[component_name] += cache[component_name][:, pos, :].sum(dim=0).detach().cpu()
+                    aggregated_vector_dict[component_name] += cache[component_name][:, pos, :].squeeze(dim=0).detach().cpu()
                 cache[component_name] = component_dot_product
 
             # Remove from GPU to avoid OOM
