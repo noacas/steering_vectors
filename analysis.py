@@ -184,8 +184,7 @@ class ComponentPredictor:
         chosen_alpha = alphas[chosen_index]
         chosen_coefs = coefs[:, chosen_index]
 
-        # lasso = Lasso(alpha=chosen_alpha)
-        lasso = Lasso(alpha=0.0)
+        lasso = Lasso(alpha=chosen_alpha)
         lasso.fit(X_train, target_train)
 
         r2 = lasso.score(X_test, target_test) 
