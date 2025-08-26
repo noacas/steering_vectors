@@ -122,3 +122,19 @@ class ModelBundle:
         self.model_name = model_name
         self.model, self.hook_names, self.model_layer = get_model_attr(model_name)
         return True
+
+    def get_default_position(self) -> int | str:
+        """
+        Get the default position for this model.
+        Returns:
+            - For Gemma_1: -1 (last position)
+            - For Gemma_2: "all" (average over all positions)
+            - For unknown models: -1 (fallback)
+        """
+        if self.model_name == GEMMA_1:
+            return -1
+        elif self.model_name == GEMMA_2:
+            return "all"
+        else:
+            # Fallback to position -1 for unknown models
+            return -1

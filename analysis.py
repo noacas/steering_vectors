@@ -232,17 +232,21 @@ class ComponentAnalyzer:
         os.makedirs(vector_dir, exist_ok=True)
         return vector_dir
 
-    def _get_position_dir(self, position: int) -> str:
-        position_dir = os.path.join(self._get_vector_dir(), f"pos_{position}")
+    def _get_position_dir(self, position: int | str) -> str:
+        if position == "all":
+            position_name = "averaged"
+        else:
+            position_name = f"pos_{position}"
+        position_dir = os.path.join(self._get_vector_dir(), position_name)
         os.makedirs(position_dir, exist_ok=True)
         return position_dir
 
-    def _save_top_features(self, position: int, set_name: str, features_and_coefs: List[Tuple[str, float]], method: str) -> None:
+    def _save_top_features(self, position: int | str, set_name: str, features_and_coefs: List[Tuple[str, float]], method: str) -> None:
         position_dir = self._get_position_dir(position)
         df = pd.DataFrame(features_and_coefs[: self.top_k], columns=["feature", "coef"])
         df.to_csv(os.path.join(position_dir, f"{method}_{set_name}_top_features.csv"), index=False)
 
-    def _append_summary_row(self, method: str, position: int, set_name: str, r2: float,
+    def _append_summary_row(self, method: str, position: int | str, set_name: str, r2: float,
                              intercept, top_features: List[Tuple[str, float]]) -> None:
         top_features_str = "; ".join([f"{name}:{coef:.4f}" for name, coef in top_features[: self.top_k]])
         common_prefix = [self.model_name, self.steering_vector, position, method, set_name]
@@ -355,9 +359,10 @@ class ComponentAnalyzer:
             similarities = self._compute_component_similarities(negative_agg_train, positive_agg_train, refusal_dir_cpu)
             similarities.sort(key=lambda x: abs(x[1]), reverse=True)
             self._append_summary_row("Component Similarities", position, "All", 0.0, None, similarities)
-            self._log(f"pos {position} | Component Similarities | top: {', '.join([n for n,_ in similarities[:5]])}")
+            position_str = "averaged" if position == "all" else f"pos {position}"
+            self._log(f"{position_str} | Component Similarities | top: {', '.join([n for n,_ in similarities[:5]])}")
     
-    def _analyze_lasso_path_for_set(self, dots_train: np.ndarray, dots_test: np.ndarray, norms_train: np.ndarray, norms_test: np.ndarray, set_name: str, position: int) -> None:
+    def _analyze_lasso_path_for_set(self, dots_train: np.ndarray, dots_test: np.ndarray, norms_train: np.ndarray, norms_test: np.ndarray, set_name: str, position: int | str) -> None:
         r2, chosen_coefs, alphas, coefs, train_feature_names = self.predictor.lasso_path_components_and_norms(
             dots_train,
             dots_test,
@@ -384,7 +389,8 @@ class ComponentAnalyzer:
         if self.save_details:
             self._save_top_features(position, set_name, names_and_coeffs, method="lars")
         self._append_summary_row("lars", position, set_name, r2, None, names_and_coeffs)
-        self._log(f"pos {position} | LARS negative R²={r2:.3f} | top: {', '.join([n for n,_ in names_and_coeffs[:5]])}")
+        position_str = "averaged" if position == "all" else f"pos {position}"
+        self._log(f"{position_str} | LARS negative R²={r2:.3f} | top: {', '.join([n for n,_ in names_and_coeffs[:5]])}")
 
 
     def analyze_lasso_path(self) -> None:
@@ -458,7 +464,8 @@ class ComponentAnalyzer:
             top_pairs = [(name, diff_means_train[name]) for name, _ in positive_top]
             self._append_summary_row("diff", position, "pos-vs-neg", r2=None, intercept=None, top_features=top_pairs)
             top_names = ", ".join([name for name, _ in positive_top[:5]])
-            self._log(f"pos {position} | run_analysis Δmeans top: {top_names}")
+            position_str = "averaged" if position == "all" else f"pos {position}"
+        self._log(f"{position_str} | run_analysis Δmeans top: {top_names}")
 
         return self._save_results(train_dict, test_dict, negative_dict, positive_dict)
 
