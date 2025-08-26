@@ -103,8 +103,8 @@ def get_dot_act(model: ModelBundle, dataset, pos=None, refusal_dir=None, cache_n
                     if pos != "all":
                         aggregated_vector_dict[component_name] += component_activations[:, pos, :].sum(dim=0).detach().cpu()
                     else:
-                        # Average over all positions except last
-                        aggregated_vector_dict[component_name] += component_activations[:, :-1, :].mean(dim=0).detach().cpu()
+                        # Average over all positions except last, then sum over batch
+                        aggregated_vector_dict[component_name] += component_activations[:, :-1, :].mean(dim=1).sum(dim=0).detach().cpu()
                 
                 cache[component_name] = component_dot_product
 
