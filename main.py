@@ -12,7 +12,7 @@ from collections import defaultdict
 from collect_data import DataCollector
 from utils import create_timestamped_results_dir
 from datetime import datetime
-
+from visualize import Visualize
 
 def get_steering_vector_names_for_gemma2():
     path = "content/axbench_chosen_dataset/"
@@ -74,6 +74,10 @@ def main():
     if args.run_analysis:
         analyze(data=data, results_dir=results_dir)
 
-
+    if args.run_visualize:
+        csv_file_path = "/home/joberant/NLP_2425b/troyansky1/steering_vectors/results_analysis/results_20250820_133042/summary_all.csv"
+        viz = Visualize(csv_file_path)
+        viz.generate_all_plots()
+        
 if __name__ == "__main__":
     main()

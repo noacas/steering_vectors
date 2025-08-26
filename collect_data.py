@@ -13,6 +13,7 @@ class DataCollector:
     Each position maps to a tuple of four subsets:
     (harmless_train, harmful_train, harmless_test, harmful_test).
     Each subset is a tuple: (dot_products_list, norms_list, aggregated_vector_dict).
+    If positions is None, uses the model's default position behavior.
     """
 
     def __init__(self, model_bundle: ModelBundle, positions: List[int] = None):
@@ -51,18 +52,26 @@ class DataCollector:
     def collect_data(self) -> Dict[int | str, object]:
         data_subsets = self._get_data_subsets()
         
-        self.positions = self.positions if self.positions is not None else range(-1, -MIN_LEN - 1, -1)
+        # Determine positions to use
+        if self.positions is None:
+            # Use model's default position
+            default_pos = self.model_bundle.get_default_position()
+            positions_to_use = [default_pos]
+        else:
+            # Use the provided positions
+            positions_to_use = self.positions
 
         out: Dict[int | str, object] = {}
         out["meta"] = {
             "model_layer": self.model_bundle.model_layer,
             "direction": self.model_bundle.direction.detach().cpu(),
-            "positions": self.positions,
+            "positions": positions_to_use,
         }
 
-        for position in self.positions:
-            out[position] = self._compute_dot_activations(
-                position, data_subsets, cache_norms=True, get_aggregated_vector=True
-            )
+        # Since we're using model-specific defaults, there's only one position to process
+        position = positions_to_use[0]
+        out[position] = self._compute_dot_activations(
+            position, data_subsets, cache_norms=True, get_aggregated_vector=True
+        )
 
         return out

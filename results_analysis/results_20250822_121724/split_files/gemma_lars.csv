@@ -1,0 +1,7 @@
+model,steering_vector,position,method,set,r2,intercept,top_features
+gemma,harmfull,-1,lars,negative,0.4722574933125961,,5.attention;9.mlp;7.attention;8.mlp;9.attention;5.mlp;0.attention;6.mlp;3.attention;7.mlp;6.attention;8.attention;2.mlp;0.residual;1.attention;1.mlp;4.mlp;2.attention;0.mlp;3.mlp;4.attention
+gemma,harmfull,-1,lars,positive,0.5646550567809926,,8.mlp;5.mlp;9.mlp;3.mlp;7.mlp;6.mlp;5.attention;0.residual;7.attention;8.attention;9.attention;4.mlp;4.attention;0.mlp;2.mlp;6.attention;3.attention;1.mlp;1.attention;0.attention;2.attention
+gemma,harmfull,-2,lars,negative,0.4127372519876184,,5.mlp;9.mlp;6.mlp;7.mlp;7.attention;8.mlp;4.mlp;3.mlp;0.residual;5.attention;0.attention;9.attention;8.attention;6.attention;0.mlp;1.attention;4.attention;2.mlp;1.mlp;2.attention;3.attention
+gemma,harmfull,-2,lars,positive,0.7198088175777555,,8.mlp;9.mlp;5.mlp;5.attention;7.mlp;7.attention;6.mlp;3.attention;0.residual;9.attention;8.attention;6.attention;3.mlp;4.mlp;2.mlp;0.mlp;0.attention;1.mlp;1.attention;2.attention;4.attention
+gemma,harmfull,-3,lars,negative,0.2849185667922677,,9.mlp;7.mlp;6.mlp;5.mlp;8.mlp;7.attention;0.attention;5.attention;0.residual;3.mlp;9.attention;3.attention;6.attention;4.attention;0.mlp;1.mlp;4.mlp;8.attention;2.attention;1.attention;2.mlp
+gemma,harmfull,-3,lars,positive,0.7998764139019018,,8.mlp;9.mlp;7.mlp;5.mlp;5.attention;7.attention;3.mlp;6.mlp;0.residual;3.attention;9.attention;8.attention;2.mlp;6.attention;0.mlp;2.attention;0.attention;4.mlp;1.mlp;4.attention;1.attention
