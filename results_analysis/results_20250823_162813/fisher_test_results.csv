@@ -1,0 +1,20 @@
+Component,Readable_Name,Layer,Component_Type,Fisher_P_Value,Fisher_P_Formatted,FDR_P_Value,FDR_P_Formatted,FDR_Significant,Consistency_Ratio,Consistency_Count
+blocks.10.ln1_post.hook_normalized_pos-2,Layer 10 Layer Norm 1 (Post) (hook_normalized_pos-2),10,Layer Norm 1 (Post),0.00020087762260723174,<0.001,0.00021203749052985574,<0.001,True,0.3333333333333333,4/12
+blocks.10.ln1_post.hook_normalized_pos-3,Layer 10 Layer Norm 1 (Post) (hook_normalized_pos-3),10,Layer Norm 1 (Post),0.0002373506251117652,<0.001,0.0002373506251117652,<0.001,True,0.3333333333333333,4/12
+blocks.13.ln1_post.hook_normalized_pos-2,Layer 13 Layer Norm 1 (Post) (hook_normalized_pos-2),13,Layer Norm 1 (Post),3.405983434956461e-06,<0.001,5.8830622967429776e-06,<0.001,True,0.3333333333333333,4/12
+blocks.13.ln1_post.hook_normalized_pos-3,Layer 13 Layer Norm 1 (Post) (hook_normalized_pos-3),13,Layer Norm 1 (Post),2.0826771382709275e-05,<0.001,2.394573011366794e-05,<0.001,True,0.3333333333333333,4/12
+blocks.15.ln2_post.hook_normalized_pos-1,Layer 15 Layer Norm 2 (Post) (hook_normalized_pos-1),15,Layer Norm 2 (Post),2.085801358342465e-05,<0.001,2.394573011366794e-05,<0.001,True,0.4166666666666667,5/12
+blocks.15.ln2_post.hook_normalized_pos-2,Layer 15 Layer Norm 2 (Post) (hook_normalized_pos-2),15,Layer Norm 2 (Post),1.8773142645200913e-05,<0.001,2.394573011366794e-05,<0.001,True,0.3333333333333333,4/12
+blocks.18.ln2_post.hook_normalized_pos-1,Layer 18 Layer Norm 2 (Post) (hook_normalized_pos-1),18,Layer Norm 2 (Post),9.758860386455126e-14,<0.001,3.708366946852948e-13,<0.001,True,0.75,9/12
+blocks.18.ln2_post.hook_normalized_pos-2,Layer 18 Layer Norm 2 (Post) (hook_normalized_pos-2),18,Layer Norm 2 (Post),1.7949729813615534e-08,<0.001,4.872069520838502e-08,<0.001,True,0.5,6/12
+blocks.18.ln2_post.hook_normalized_pos-3,Layer 18 Layer Norm 2 (Post) (hook_normalized_pos-3),18,Layer Norm 2 (Post),0.0,<0.001,0.0,<0.001,True,0.75,9/12
+blocks.19.ln2_post.hook_normalized_pos-2,Layer 19 Layer Norm 2 (Post) (hook_normalized_pos-2),19,Layer Norm 2 (Post),4.128186289475977e-07,<0.001,8.715059944449285e-07,<0.001,True,0.4166666666666667,5/12
+blocks.19.ln2_post.hook_normalized_pos-3,Layer 19 Layer Norm 2 (Post) (hook_normalized_pos-3),19,Layer Norm 2 (Post),1.9465881417879416e-07,<0.001,4.6231468367463613e-07,<0.001,True,0.5,6/12
+blocks.20.hook_resid_post_pos-1,Layer 20 hook_resid_post_pos-1,20,hook_resid_post_pos-1,0.0,<0.001,0.0,<0.001,True,1.0,12/12
+blocks.20.hook_resid_post_pos-2,Layer 20 hook_resid_post_pos-2,20,hook_resid_post_pos-2,0.0,<0.001,0.0,<0.001,True,1.0,12/12
+blocks.20.hook_resid_post_pos-3,Layer 20 hook_resid_post_pos-3,20,hook_resid_post_pos-3,0.0,<0.001,0.0,<0.001,True,1.0,12/12
+blocks.20.ln1_post.hook_normalized_pos-2,Layer 20 Layer Norm 1 (Post) (hook_normalized_pos-2),20,Layer Norm 1 (Post),5.947519409299495e-06,<0.001,9.416905731390868e-06,<0.001,True,0.3333333333333333,4/12
+blocks.20.ln2_post.hook_normalized_pos-1,Layer 20 Layer Norm 2 (Post) (hook_normalized_pos-1),20,Layer Norm 2 (Post),2.390665443385842e-11,<0.001,7.570440570721834e-11,<0.001,True,0.5833333333333334,7/12
+blocks.20.ln2_post.hook_normalized_pos-2,Layer 20 Layer Norm 2 (Post) (hook_normalized_pos-2),20,Layer Norm 2 (Post),1.7649238132078082e-06,<0.001,3.3533552450948356e-06,<0.001,True,0.5,6/12
+blocks.20.ln2_post.hook_normalized_pos-3,Layer 20 Layer Norm 2 (Post) (hook_normalized_pos-3),20,Layer Norm 2 (Post),2.1186722005905878e-05,<0.001,2.394573011366794e-05,<0.001,True,0.4166666666666667,5/12
+blocks.6.ln2_post.hook_normalized_pos-2,Layer 6 Layer Norm 2 (Post) (hook_normalized_pos-2),6,Layer Norm 2 (Post),2.142512694380816e-05,<0.001,2.394573011366794e-05,<0.001,True,0.3333333333333333,4/12

@@ -103,6 +103,24 @@ def _save_global_pval_csvs(all_positive_pvals: List[List], all_negative_pvals: L
             )
             pos_pivot.to_csv(os.path.join(results_dir, f"negative_pvals_pos{position}.csv"))
 
+def check_f_test_assumptions(X_train, y_train, X_test, y_test, component_name):
+   """Check F-test assumptions concisely."""
+   from scipy.stats import shapiro
+   
+   # Fit model and get residuals
+   lr = LinearRegression()
+   lr.fit(X_train, y_train)
+   y_pred = lr.predict(X_test)
+   residuals = y_test - y_pred
+   
+   # Check assumptions
+   shapiro_stat, shapiro_p = shapiro(residuals)
+   r2 = r2_score(y_test, y_pred)
+   
+   print(f"{component_name[:20]:20} | R²={r2:.3f} | Normality p={shapiro_p:.4f} | {'✓' if shapiro_p > 0.05 else '✗'}")
+   
+   return shapiro_p > 0.05
+
 class ComponentPredictor:
     """Handles component prediction analysis using linear regression."""
 
@@ -152,9 +170,13 @@ class ComponentPredictor:
         target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
 
         results = {} # Changed from r2_scores
+        print("\n=== F-TEST ASSUMPTION CHECKS ===")
+
         for component_name in component_names:
             features_train = self._extract_dot_products(dot_prod_dict_train, component_name).reshape(-1, 1)
             features_test = self._extract_dot_products(dot_prod_dict_test, component_name).reshape(-1, 1)
+            
+            check_f_test_assumptions(features_train, target_train, features_test, target_test, component_name)
             
             r2, p_value = self._fit_and_predict(
                 features_train, target_train, features_test, target_test
