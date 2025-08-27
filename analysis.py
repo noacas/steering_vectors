@@ -7,7 +7,7 @@ import torch
 from dot_act import get_mean_dot_prod
 from utils import dict_subtraction
 from consts import GEMMA_1, GEMMA_2, GEMMA_1_LAYER, GEMMA_2_LAYER
-from preidcotr import ComponentPredictor
+from predictor import ComponentPredictor
 
 
 @dataclass
