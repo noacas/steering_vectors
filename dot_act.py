@@ -6,39 +6,6 @@ from consts import DEVICE
 from model import ModelBundle
 
 
-def get_act(model: ModelBundle, dataset, pos=None):
-    print("\nProcessing dataset and caching activations...")
-    output = []
-
-    # Build hook names once
-    hook_names = model.hook_names
-
-    # Use model's default position if none provided
-    if pos is None:
-        pos = model.get_default_position()
-
-    for text in tqdm(dataset, desc="Caching Activations"):
-        # Tokenize the input text
-        # TODO: For the Qwen example, they had some chat template, do we need this too maybe?
-        inputs = model.model.to_tokens(text).to(DEVICE)
-
-        with torch.no_grad():
-          #TODO next meeting shira
-          # This is from the tutorial, we don't need to save all the layers in the cache
-          # _, gpt2_attn_cache = model.run_with_cache(gpt2_tokens, remove_batch_dim=True, stop_at_layer=attn_layer + 1, names_filter=[attn_hook_name])
-            _, _cache = model.model.run_with_cache(inputs, names_filter = hook_names, stop_at_layer=model.model_layer + 1)
-            
-            if pos != "all":
-                cache = _cache.cpu()[0, pos] # Need to change the indexing when adding batches
-            else:
-                # Average over all positions except the last token
-                cache = _cache.cpu()[0, :-1].mean(dim=0) # Average over positions
-
-            output.append(cache)
-
-     # output[example][component_name] = activations for text example i (at position pos or averaged over positions)
-    return output
-
 def get_dot_act(model: ModelBundle, dataset, pos=None, refusal_dir=None, cache_norms=False, get_aggregated_vector=False):
     """
     Cache dot products with the steering vector for each example in the dataset.
@@ -57,10 +24,8 @@ def get_dot_act(model: ModelBundle, dataset, pos=None, refusal_dir=None, cache_n
     if get_aggregated_vector:
         aggregated_vector_dict = defaultdict(lambda : torch.zeros_like(refusal_dir, device='cpu'))
 
-    # TODO: Batching
     for text in tqdm(dataset, desc="Caching Activations"):
         # Tokenize the input text
-        # TODO: For the Qwen example, they had some chat template, do we need this too maybe?
         inputs = model.model.to_tokens(text).to(DEVICE)
 
         with torch.no_grad():
@@ -130,6 +95,7 @@ def get_dot_act(model: ModelBundle, dataset, pos=None, refusal_dir=None, cache_n
 
     # output_prod[example][component_name] = dot product of component component_name with refusal dir for text example i (averaged over positions)
     return tuple(outputs)
+
 
 def get_mean_dot_prod(dot_prod_dict):
     component_names = dot_prod_dict[0].keys()
