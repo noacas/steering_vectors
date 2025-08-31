@@ -1,20 +1,15 @@
-import itertools
 import os
-import warnings
 from typing import Dict, List, Tuple
 from dataclasses import dataclass
-import matplotlib.pyplot as plt
-import seaborn as sns
-
 import numpy as np
 import pandas as pd
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression, Lasso, lars_path, ElasticNetCV
 import torch
-
 from dot_act import get_mean_dot_prod
 from utils import dict_subtraction
 from consts import GEMMA_1, GEMMA_2, GEMMA_1_LAYER, GEMMA_2_LAYER
+from predictor import ComponentPredictor
 
 
 @dataclass
@@ -554,4 +549,3 @@ def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
     if global_rows:
         combined_df = pd.DataFrame(global_rows, columns=global_cols)
         combined_df.to_csv(os.path.join(results_dir, "summary_all.csv"), index=False)
-
