@@ -3,7 +3,7 @@ import warnings
 from typing import Dict, List, Tuple
 import numpy as np
 from sklearn.metrics import r2_score
-from sklearn.linear_model import LinearRegression, Lasso, lars_path
+from sklearn.linear_model import LinearRegression, Lasso, lars_path, ElasticNetCV
 from consts import GEMMA_1
 
 
@@ -85,6 +85,65 @@ class ComponentPredictor:
         """Fit LARS path and return (alphas, coefs)."""
         alphas, _active, coefs = lars_path(X_train, y_train)
         return alphas, coefs
+
+    def _fit_lasso(self, X_train: np.ndarray, y_train: np.ndarray) -> Lasso:
+        """Fit Lasso regression and return the model."""
+        lasso = Lasso(alpha=0.12, max_iter=10000)
+        lasso.fit(X_train, y_train)
+        return lasso
+
+    def _fit_elastic_net(self, X_train: np.ndarray, y_train: np.ndarray) -> ElasticNetCV:
+        """Fit ElasticNet regression and return the model."""
+        elastic_net = ElasticNetCV(cv=5, l1_ratio=[.1, .5, .7, .9, .95, .99, 1])
+        elastic_net.fit(X_train, y_train)
+        return elastic_net
+
+    def mlp_vs_attn(self, dot_prod_dict_train: List[Dict],
+                    dot_prod_dict_test: List[Dict]) -> Tuple[float, float, np.ndarray, np.ndarray, List[str], List[str]]:
+        """Fit ElasticNet regression and return the model."""
+        component_names = list(dot_prod_dict_train[0].keys())
+        feature_names = [c for c in component_names if c != self.residual_stream_component]
+
+        mlp_names = [c for c in feature_names if 'mlp' in c or 'ln2' in c]
+        attn_names = [c for c in feature_names if 'attn' in c or 'ln1' in c]
+        
+        mlp_train = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_train, c).reshape(-1, 1)
+            for c in mlp_names
+        ], axis=1)
+        
+        attn_train = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_train, c).reshape(-1, 1)
+            for c in attn_names
+        ], axis=1)
+        
+        mlp_test = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_test, c).reshape(-1, 1)
+            for c in mlp_names
+        ], axis=1)
+        
+        attn_test = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_test, c).reshape(-1, 1)
+            for c in attn_names
+        ], axis=1)
+
+        target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
+        target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
+
+        enet_mlp = self._fit_elastic_net(mlp_train, target_train)
+        enet_attn = self._fit_elastic_net(attn_train, target_train)
+
+        mlp_r2 = enet_mlp.score(mlp_test, target_test)
+        attn_r2 = enet_attn.score(attn_test, target_test)
+
+        # Compute path with warnings suppressed for numerical edge cases
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn.linear_model._least_angle")
+            alphas_mlp, coefs_mlp = self._fit_lasso_path(mlp_train, target_train)
+            alphas_attn, coefs_attn = self._fit_lasso_path(attn_train, target_train)
+
+        return mlp_r2, attn_r2, coefs_mlp, coefs_attn, mlp_names, attn_names
+
 
     def lasso_path_components_and_norms(self, dot_prod_dict_train: List[Dict],
                                 dot_prod_dict_test: List[Dict],
