@@ -81,6 +81,40 @@ class ComponentPredictor:
 
         return r2_scores
 
+    def compute_k_component_r2(self, dot_prod_dict_train: List[Dict],
+                               dot_prod_dict_test: List[Dict], k: int) -> Dict[str, float]:
+        """Compute R² scores for all combinations of k components."""
+        component_names = list(dot_prod_dict_train[0].keys())
+        
+        # Remove the target component from feature selection
+        feature_names = [c for c in component_names if c != self.residual_stream_component]
+        
+        target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
+        target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
+        
+        r2_scores = {}
+        
+        # Generate all combinations of k components
+        for component_combo in itertools.combinations(feature_names, k):
+            # Stack features for k components
+            features_train = np.stack([
+                self._extract_dot_products(dot_prod_dict_train, c)
+                for c in component_combo
+            ], axis=1)
+            
+            features_test = np.stack([
+                self._extract_dot_products(dot_prod_dict_test, c)
+                for c in component_combo
+            ], axis=1)
+            
+            # Create a readable key for the combination
+            combo_key = " x ".join(component_combo)
+            r2_scores[combo_key] = self._fit_and_predict(
+                features_train, target_train, features_test, target_test
+            )
+        
+        return r2_scores
+
     def _fit_lasso_path(self, X_train: np.ndarray, y_train: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Fit LARS path and return (alphas, coefs)."""
         alphas, _active, coefs = lars_path(X_train, y_train)

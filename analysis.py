@@ -295,6 +295,62 @@ class ComponentAnalyzer:
 
         return self._save_results(train_dict, test_dict, negative_dict, positive_dict)
 
+    def analyze_k_component_groups(self, k: int) -> Dict[int, Dict[str, float]]:
+        """Analyze all combinations of k components for steering vector prediction."""
+        results = {}
+        
+        for position in self.positions:
+            negative_outputs_train, positive_outputs_train, negative_outputs_test, positive_outputs_test = self.data[position]
+            
+            negative_dots_train = negative_outputs_train[0]
+            positive_dots_train = positive_outputs_train[0]
+            negative_dots_test = negative_outputs_test[0]
+            positive_dots_test = positive_outputs_test[0]
+            
+            # Compute R² scores for k-component combinations
+            negative_r2s = self.predictor.compute_k_component_r2(negative_dots_train, negative_dots_test, k)
+            positive_r2s = self.predictor.compute_k_component_r2(positive_dots_train, positive_dots_test, k)
+            
+            # Store results for this position
+            results[position] = {
+                'negative': negative_r2s,
+                'positive': positive_r2s
+            }
+            
+            # Log top performing combinations
+            negative_top = sorted(negative_r2s.items(), key=lambda x: x[1], reverse=True)[:5]
+            positive_top = sorted(positive_r2s.items(), key=lambda x: x[1], reverse=True)[:5]
+            
+            position_str = "averaged" if position == "all" else f"pos {position}"
+            self._log(f"{position_str} | k={k} negative top R²: {[f'{name}:{r2:.3f}' for name, r2 in negative_top]}")
+            self._log(f"{position_str} | k={k} positive top R²: {[f'{name}:{r2:.3f}' for name, r2 in positive_top]}")
+        
+        return results
+
+    def analyze_multiple_k_values(self, k_values: List[int]) -> Dict[int, Dict[int, Dict[str, float]]]:
+        """Analyze multiple k values and return comprehensive results."""
+        all_results = {}
+        
+        for k in k_values:
+            self._log(f"Analyzing k={k} component combinations...")
+            k_results = self.analyze_k_component_groups(k)
+            all_results[k] = k_results
+            
+            # Summary statistics for this k
+            for position in self.positions:
+                negative_r2s = k_results[position]['negative']
+                positive_r2s = k_results[position]['positive']
+                
+                neg_max = max(negative_r2s.values()) if negative_r2s else 0
+                pos_max = max(positive_r2s.values()) if positive_r2s else 0
+                neg_mean = np.mean(list(negative_r2s.values())) if negative_r2s else 0
+                pos_mean = np.mean(list(positive_r2s.values())) if positive_r2s else 0
+                
+                position_str = "averaged" if position == "all" else f"pos {position}"
+                self._log(f"{position_str} | k={k} summary: neg_max={neg_max:.3f}, pos_max={pos_max:.3f}, neg_mean={neg_mean:.3f}, pos_mean={pos_mean:.3f}")
+        
+        return all_results
+
 
 def analyze(data: Dict, multicomponent: bool = False, results_dir: str = None):
     # Global aggregation across all models and steering vectors
