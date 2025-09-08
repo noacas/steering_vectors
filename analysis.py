@@ -41,6 +41,8 @@ class ComponentAnalyzer:
         # Diff-means summary rows with method="diff"; intercept and r2 left as None
         self._diff_summary_rows: List[List] = []
         self._sim_summary_rows: List[List] = []
+        # K-component analysis summary rows
+        self._k_component_summary_rows: List[List] = []
 
         # Choose prediction method based on multicomponent flag
         self.prediction_method = (
@@ -72,6 +74,20 @@ class ComponentAnalyzer:
         df = pd.DataFrame(features_and_coefs[: self.top_k], columns=["feature", "coef"])
         df.to_csv(os.path.join(position_dir, f"{method}_{set_name}_top_features.csv"), index=False)
 
+    def _save_k_component_results(self, position: int | str, k: int, negative_r2s: Dict[str, float], positive_r2s: Dict[str, float]) -> None:
+        """Save k-component analysis results to CSV files."""
+        position_dir = self._get_position_dir(position)
+        
+        # Save negative results
+        neg_df = pd.DataFrame(list(negative_r2s.items()), columns=["component_combination", "r2_score"])
+        neg_df = neg_df.sort_values("r2_score", ascending=False)
+        neg_df.to_csv(os.path.join(position_dir, f"k{k}_negative_r2s.csv"), index=False)
+        
+        # Save positive results
+        pos_df = pd.DataFrame(list(positive_r2s.items()), columns=["component_combination", "r2_score"])
+        pos_df = pos_df.sort_values("r2_score", ascending=False)
+        pos_df.to_csv(os.path.join(position_dir, f"k{k}_positive_r2s.csv"), index=False)
+
     def _append_summary_row(self, method: str, position: int | str, set_name: str, r2: float,
                              intercept, top_features: List[Tuple[str, float]]) -> None:
         top_features_str = "; ".join([f"{name}:{coef:.4f}" for name, coef in top_features[: self.top_k]])
@@ -85,6 +101,9 @@ class ComponentAnalyzer:
             self._diff_summary_rows.append(common_prefix + [None, None, top_features_str])
         elif method == "Component Similarities":
             self._sim_summary_rows.append(common_prefix + [None, None, top_features_str])
+        elif method.startswith("k"):
+            # For k-component analysis: method="k2", "k3", etc.
+            self._k_component_summary_rows.append(common_prefix + [r2, None, top_features_str])
 
     def _flush_summaries(self) -> None:
         vector_dir = self._get_vector_dir()
@@ -107,6 +126,11 @@ class ComponentAnalyzer:
             diff_cols = ["model", "steering_vector", "position", "method", "set", "r2", "intercept", "top_features"]
             pd.DataFrame(self._sim_summary_rows, columns=diff_cols).to_csv(
                 os.path.join(vector_dir, "sim_summary.csv"), index=False
+            )
+        if self._k_component_summary_rows:
+            k_cols = ["model", "steering_vector", "position", "method", "set", "r2", "intercept", "top_features"]
+            pd.DataFrame(self._k_component_summary_rows, columns=k_cols).to_csv(
+                os.path.join(vector_dir, "k_component_summary.csv"), index=False
             )
 
     def _get_model_layer(self) -> int:
@@ -295,7 +319,7 @@ class ComponentAnalyzer:
 
         return self._save_results(train_dict, test_dict, negative_dict, positive_dict)
 
-    def analyze_k_component_groups(self, k: int) -> Dict[int, Dict[str, float]]:
+    def analyze_k_component_groups(self, k: int, save_results: bool = True) -> Dict[int, Dict[str, float]]:
         """Analyze all combinations of k components for steering vector prediction."""
         results = {}
         
@@ -317,9 +341,22 @@ class ComponentAnalyzer:
                 'positive': positive_r2s
             }
             
-            # Log top performing combinations
+            # Save results to CSV files if requested
+            if save_results and self.save_details:
+                self._save_k_component_results(position, k, negative_r2s, positive_r2s)
+            
+            # Log top performing combinations and add to summary
             negative_top = sorted(negative_r2s.items(), key=lambda x: x[1], reverse=True)[:5]
             positive_top = sorted(positive_r2s.items(), key=lambda x: x[1], reverse=True)[:5]
+            
+            # Add summary rows
+            if negative_top:
+                best_neg_r2 = negative_top[0][1]
+                self._append_summary_row(f"k{k}", position, "negative", best_neg_r2, None, negative_top)
+            
+            if positive_top:
+                best_pos_r2 = positive_top[0][1]
+                self._append_summary_row(f"k{k}", position, "positive", best_pos_r2, None, positive_top)
             
             position_str = "averaged" if position == "all" else f"pos {position}"
             self._log(f"{position_str} | k={k} negative top R²: {[f'{name}:{r2:.3f}' for name, r2 in negative_top]}")
@@ -348,6 +385,10 @@ class ComponentAnalyzer:
                 
                 position_str = "averaged" if position == "all" else f"pos {position}"
                 self._log(f"{position_str} | k={k} summary: neg_max={neg_max:.3f}, pos_max={pos_max:.3f}, neg_mean={neg_mean:.3f}, pos_mean={pos_mean:.3f}")
+        
+        # Flush k-component summaries after all k values are processed
+        if self.save_details:
+            self._flush_summaries()
         
         return all_results
 

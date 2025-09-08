@@ -7,6 +7,7 @@ from datetime import datetime
 from collections import defaultdict
 import re
 from pathlib import Path
+from typing import Dict
 
 class Visualize:
     def __init__(self, csv_file_path):
@@ -281,6 +282,288 @@ class Visualize:
             
             print(f"Saved R² vs component usage analysis for {model} to {save_path}")
     
+    def plot_k_component_results(self, results: Dict[int, Dict[int, Dict[str, float]]], 
+                                model_name: str, steering_vector: str, top_n: int = 10) -> None:
+        """Create plots for k-component analysis results."""
+        if not results:
+            print("No results to plot")
+            return
+        
+        # Set up the plotting style
+        plt.style.use('default')
+        sns.set_palette("husl")
+        
+        for k in results.keys():
+            self._plot_single_k_results(k, results[k], model_name, steering_vector, top_n)
+        
+        # Create comparison plots across k values
+        self._plot_k_comparison(results, model_name, steering_vector)
+        
+        print("K-component plots created successfully")
+
+    def _plot_single_k_results(self, k: int, k_results: Dict[int, Dict[str, float]], 
+                              model_name: str, steering_vector: str, top_n: int) -> None:
+        """Plot results for a single k value."""
+        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+        fig.suptitle(f'K={k} Component Analysis Results - {model_name.upper()} - {steering_vector}', 
+                    fontsize=16, fontweight='bold')
+        
+        positions = list(k_results.keys())
+        
+        for idx, position in enumerate(positions):
+            row = idx // 2
+            col = idx % 2
+            
+            if row >= 2 or col >= 2:
+                break
+                
+            ax = axes[row, col]
+            
+            # Get results for this position
+            neg_r2s = k_results[position]['negative']
+            pos_r2s = k_results[position]['positive']
+            
+            # Get top N combinations
+            neg_top = sorted(neg_r2s.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            pos_top = sorted(pos_r2s.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            
+            # Create bar plot
+            x_pos = np.arange(len(neg_top))
+            width = 0.35
+            
+            neg_scores = [score for _, score in neg_top]
+            pos_scores = [score for _, score in pos_top]
+            
+            ax.bar(x_pos - width/2, neg_scores, width, label='Negative', alpha=0.8)
+            ax.bar(x_pos + width/2, pos_scores, width, label='Positive', alpha=0.8)
+            
+            ax.set_xlabel('Component Combinations')
+            ax.set_ylabel('R² Score')
+            ax.set_title(f'Position {position} - Top {top_n} Combinations')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            # Rotate x-axis labels for readability
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels([f'Combo {i+1}' for i in range(len(neg_top))], rotation=45, ha='right')
+        
+        # Hide unused subplots
+        for idx in range(len(positions), 4):
+            row = idx // 2
+            col = idx % 2
+            axes[row, col].set_visible(False)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        model_dir = self._get_model_dir(model_name)
+        plot_path = model_dir / f'k{k}_component_analysis_{steering_vector}.png'
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"Saved plot: {plot_path}")
+
+    def _plot_k_comparison(self, results: Dict[int, Dict[int, Dict[str, float]]], 
+                          model_name: str, steering_vector: str) -> None:
+        """Create comparison plots across different k values."""
+        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+        fig.suptitle(f'K-Component Analysis Comparison - {model_name.upper()} - {steering_vector}', 
+                    fontsize=16, fontweight='bold')
+        
+        # Extract data for comparison
+        k_values = sorted(results.keys())
+        positions = list(results[k_values[0]].keys())
+        
+        # Plot 1: Maximum R² scores by k
+        ax1 = axes[0, 0]
+        max_neg_scores = []
+        max_pos_scores = []
+        
+        for k in k_values:
+            neg_max = max([max(results[k][pos]['negative'].values()) for pos in positions if results[k][pos]['negative']])
+            pos_max = max([max(results[k][pos]['positive'].values()) for pos in positions if results[k][pos]['positive']])
+            max_neg_scores.append(neg_max)
+            max_pos_scores.append(pos_max)
+        
+        ax1.plot(k_values, max_neg_scores, 'o-', label='Negative (Max)', linewidth=2, markersize=8)
+        ax1.plot(k_values, max_pos_scores, 's-', label='Positive (Max)', linewidth=2, markersize=8)
+        ax1.set_xlabel('Number of Components (k)')
+        ax1.set_ylabel('Maximum R² Score')
+        ax1.set_title('Best Performance by K')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Plot 2: Mean R² scores by k
+        ax2 = axes[0, 1]
+        mean_neg_scores = []
+        mean_pos_scores = []
+        
+        for k in k_values:
+            neg_means = [np.mean(list(results[k][pos]['negative'].values())) for pos in positions if results[k][pos]['negative']]
+            pos_means = [np.mean(list(results[k][pos]['positive'].values())) for pos in positions if results[k][pos]['positive']]
+            mean_neg_scores.append(np.mean(neg_means) if neg_means else 0)
+            mean_pos_scores.append(np.mean(pos_means) if pos_means else 0)
+        
+        ax2.plot(k_values, mean_neg_scores, 'o-', label='Negative (Mean)', linewidth=2, markersize=8)
+        ax2.plot(k_values, mean_pos_scores, 's-', label='Positive (Mean)', linewidth=2, markersize=8)
+        ax2.set_xlabel('Number of Components (k)')
+        ax2.set_ylabel('Mean R² Score')
+        ax2.set_title('Average Performance by K')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        # Plot 3: Distribution of R² scores for each k
+        ax3 = axes[1, 0]
+        
+        # Create box plot
+        data_for_box = []
+        labels_for_box = []
+        
+        for k in k_values:
+            k_neg_scores = []
+            k_pos_scores = []
+            for pos in positions:
+                if results[k][pos]['negative']:
+                    k_neg_scores.extend(list(results[k][pos]['negative'].values()))
+                if results[k][pos]['positive']:
+                    k_pos_scores.extend(list(results[k][pos]['positive'].values()))
+            
+            if k_neg_scores:
+                data_for_box.append(k_neg_scores)
+                labels_for_box.append(f'k={k}\n(Neg)')
+            if k_pos_scores:
+                data_for_box.append(k_pos_scores)
+                labels_for_box.append(f'k={k}\n(Pos)')
+        
+        if data_for_box:
+            ax3.boxplot(data_for_box, labels=labels_for_box)
+            ax3.set_xlabel('K Value and Set')
+            ax3.set_ylabel('R² Score')
+            ax3.set_title('R² Score Distribution by K')
+            ax3.grid(True, alpha=0.3)
+            plt.setp(ax3.get_xticklabels(), rotation=45, ha='right')
+        
+        # Plot 4: Number of combinations vs performance
+        ax4 = axes[1, 1]
+        combo_counts = []
+        max_scores = []
+        
+        for k in k_values:
+            total_combos = 0
+            k_max_score = 0
+            for pos in positions:
+                if results[k][pos]['negative']:
+                    total_combos += len(results[k][pos]['negative'])
+                    k_max_score = max(k_max_score, max(results[k][pos]['negative'].values()))
+                if results[k][pos]['positive']:
+                    total_combos += len(results[k][pos]['positive'])
+                    k_max_score = max(k_max_score, max(results[k][pos]['positive'].values()))
+            
+            combo_counts.append(total_combos)
+            max_scores.append(k_max_score)
+        
+        scatter = ax4.scatter(combo_counts, max_scores, s=100, c=k_values, cmap='viridis', alpha=0.7)
+        ax4.set_xlabel('Total Number of Combinations')
+        ax4.set_ylabel('Maximum R² Score')
+        ax4.set_title('Combinations vs Performance')
+        ax4.grid(True, alpha=0.3)
+        
+        # Add colorbar
+        cbar = plt.colorbar(scatter, ax=ax4)
+        cbar.set_label('K Value')
+        
+        # Add labels for each point
+        for i, k in enumerate(k_values):
+            ax4.annotate(f'k={k}', (combo_counts[i], max_scores[i]), 
+                        xytext=(5, 5), textcoords='offset points', fontsize=10)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        model_dir = self._get_model_dir(model_name)
+        plot_path = model_dir / f'k_component_comparison_{steering_vector}.png'
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"Saved comparison plot: {plot_path}")
+
+    def plot_component_heatmap(self, results: Dict[int, Dict[int, Dict[str, float]]], 
+                              k: int, position: int | str, model_name: str, steering_vector: str) -> None:
+        """Create a heatmap showing which components appear in top-performing combinations."""
+        if k not in results or position not in results[k]:
+            print(f"No results found for k={k}, position={position}")
+            return
+        
+        # Get top combinations for this k and position
+        neg_r2s = results[k][position]['negative']
+        pos_r2s = results[k][position]['positive']
+        
+        # Get top 20 combinations
+        neg_top = sorted(neg_r2s.items(), key=lambda x: x[1], reverse=True)[:20]
+        pos_top = sorted(pos_r2s.items(), key=lambda x: x[1], reverse=True)[:20]
+        
+        # Extract all unique components
+        all_components = set()
+        for combo, _ in neg_top + pos_top:
+            components = combo.split(' x ')
+            all_components.update(components)
+        
+        all_components = sorted(list(all_components))
+        
+        # Create binary matrix: 1 if component is in combination, 0 otherwise
+        neg_matrix = np.zeros((len(neg_top), len(all_components)))
+        pos_matrix = np.zeros((len(pos_top), len(all_components)))
+        
+        for i, (combo, _) in enumerate(neg_top):
+            components = combo.split(' x ')
+            for comp in components:
+                if comp in all_components:
+                    neg_matrix[i, all_components.index(comp)] = 1
+        
+        for i, (combo, _) in enumerate(pos_top):
+            components = combo.split(' x ')
+            for comp in components:
+                if comp in all_components:
+                    pos_matrix[i, all_components.index(comp)] = 1
+        
+        # Create the plot
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+        fig.suptitle(f'Component Usage in Top Combinations (k={k}, position={position}) - {model_name.upper()} - {steering_vector}', 
+                    fontsize=16, fontweight='bold')
+        
+        # Negative set heatmap
+        sns.heatmap(neg_matrix, 
+                   xticklabels=all_components, 
+                   yticklabels=[f'Combo {i+1}' for i in range(len(neg_top))],
+                   cmap='Reds', 
+                   ax=ax1, 
+                   cbar_kws={'label': 'Component Present'})
+        ax1.set_title('Negative Set - Top 20 Combinations')
+        ax1.set_xlabel('Components')
+        ax1.set_ylabel('Combination Rank')
+        
+        # Positive set heatmap
+        sns.heatmap(pos_matrix, 
+                   xticklabels=all_components, 
+                   yticklabels=[f'Combo {i+1}' for i in range(len(pos_top))],
+                   cmap='Blues', 
+                   ax=ax2, 
+                   cbar_kws={'label': 'Component Present'})
+        ax2.set_title('Positive Set - Top 20 Combinations')
+        ax2.set_xlabel('Components')
+        ax2.set_ylabel('Combination Rank')
+        
+        # Rotate x-axis labels
+        for ax in [ax1, ax2]:
+            ax.tick_params(axis='x', rotation=45, labelsize=8)
+            ax.tick_params(axis='y', rotation=0, labelsize=8)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        model_dir = self._get_model_dir(model_name)
+        plot_path = model_dir / f'k{k}_pos{position}_component_heatmap_{steering_vector}.png'
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"Saved heatmap: {plot_path}")
 
     def generate_summary_report(self):
         """Generate a summary report with key insights."""
