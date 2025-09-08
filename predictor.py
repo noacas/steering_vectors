@@ -144,6 +144,36 @@ class ComponentPredictor:
 
         return mlp_r2, attn_r2, coefs_mlp, coefs_attn, mlp_names, attn_names
 
+    def ranking_components(self, dot_prod_dict_train: List[Dict],
+                    dot_prod_dict_test: List[Dict]) -> Tuple[float, float, np.ndarray, np.ndarray, List[str], List[str]]:
+        """Fit ElasticNet regression and return the model."""
+        component_names = list(dot_prod_dict_train[0].keys())
+        feature_names = [c for c in component_names if 'mlp' in c or 'ln2' in c or 'attn' in c or 'ln1' in c]
+        
+        X_train = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_train, c).reshape(-1, 1)
+            for c in feature_names
+        ], axis=1)
+        
+        X_test = np.concatenate([
+            self._extract_dot_products(dot_prod_dict_test, c).reshape(-1, 1)
+            for c in feature_names
+        ], axis=1)
+
+        target_train = self._extract_dot_products(dot_prod_dict_train, self.residual_stream_component)
+        target_test = self._extract_dot_products(dot_prod_dict_test, self.residual_stream_component)
+
+        enet = self._fit_elastic_net(X_train, target_train)
+
+        r2 = enet.score(X_test, target_test)
+
+        # Compute path with warnings suppressed for numerical edge cases
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn.linear_model._least_angle")
+            alphas, coefs = self._fit_lasso_path(X_train, target_train)
+
+        return r2, coefs, alphas, feature_names
+
 
     def lasso_path_components_and_norms(self, dot_prod_dict_train: List[Dict],
                                 dot_prod_dict_test: List[Dict],
